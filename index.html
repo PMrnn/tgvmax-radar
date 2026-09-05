@@ -45,6 +45,14 @@
   input:focus{border-color:var(--accent);}
   details.adv{margin:4px 0 10px;}
   details.adv summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0;}
+  .check-row{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:2px 0 14px;cursor:pointer;}
+  .check-row input{width:16px;height:16px;accent-color:var(--accent);}
+  .date-badge{display:inline-block;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:20px;margin-bottom:6px;}
+  .return-block{margin-top:10px;padding:10px 0 0;border-top:1px dashed var(--border);}
+  .return-block .return-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  .itin.compact{padding:9px 12px;margin-bottom:8px;background:var(--panel);}
+  .itin.compact .leg{font-size:12.5px;padding:2px 0;}
+  .more-note{font-size:11.5px;color:var(--muted);padding:2px 2px 0;}
   .btn{padding:11px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;}
   .btn:hover{background:var(--accent2);}
   .btn:disabled{opacity:.5;cursor:default;}
@@ -114,12 +122,32 @@
         <label>Arrivée</label>
         <input type="text" id="c-dest" list="stations-list" placeholder="Marseille">
       </div>
-      <div class="field" style="max-width:180px;">
-        <label>Date</label>
-        <input type="date" id="c-date">
+    </div>
+    <div class="row">
+      <div class="field" style="max-width:160px;">
+        <label>Date aller — du</label>
+        <input type="date" id="c-date-min">
+      </div>
+      <div class="field" style="max-width:160px;">
+        <label>au</label>
+        <input type="date" id="c-date-max">
       </div>
       <div class="field" style="flex:0 0 auto;align-self:flex-end;">
         <button class="btn" id="c-search">Chercher</button>
+      </div>
+    </div>
+    <label class="check-row">
+      <input type="checkbox" id="c-return-toggle">
+      Ajouter un retour <span style="color:var(--muted);font-weight:400;">(ne garder que les allers avec un retour possible)</span>
+    </label>
+    <div class="row" id="c-return-fields" hidden>
+      <div class="field" style="max-width:160px;">
+        <label>Date retour — du</label>
+        <input type="date" id="c-ret-date-min">
+      </div>
+      <div class="field" style="max-width:160px;">
+        <label>au</label>
+        <input type="date" id="c-ret-date-max">
       </div>
     </div>
     <details class="adv">
@@ -136,6 +164,10 @@
         <div class="field">
           <label>Correspondance max. (minutes)</label>
           <input type="number" id="c-max" value="180" min="30" max="600">
+        </div>
+        <div class="field" id="c-min-stay-field" hidden>
+          <label>Temps mini sur place avant le retour (minutes)</label>
+          <input type="number" id="c-min-stay" value="60" min="0" max="10080">
         </div>
       </div>
     </details>
@@ -268,6 +300,34 @@ function durationLabel(mins){
   return h>0 ? `${h}h${String(m).padStart(2,"0")}` : `${m}min`;
 }
 
+const MAX_RANGE_DAYS = 15;
+function dateRangeList(minStr, maxStr){
+  const out = [];
+  let d = new Date(minStr+"T00:00:00Z");
+  const end = new Date(maxStr+"T00:00:00Z");
+  while (d <= end){
+    out.push(d.toISOString().slice(0,10));
+    d.setUTCDate(d.getUTCDate()+1);
+  }
+  return out;
+}
+function dayIndex(dateStr){
+  return Math.round(Date.parse(dateStr+"T00:00:00Z")/86400000);
+}
+function absoluteMinutes(dateStr, minutesInDay){
+  return dayIndex(dateStr)*1440 + minutesInDay;
+}
+function lowerBound(sortedArr, target){
+  let lo=0, hi=sortedArr.length;
+  while (lo<hi){ const mid=(lo+hi)>>1; if (sortedArr[mid] < target) lo=mid+1; else hi=mid; }
+  return lo;
+}
+const dateLabelFmt = new Intl.DateTimeFormat("fr-FR", {weekday:"short", day:"numeric", month:"short"});
+function formatDateLabel(dateStr){
+  const d = new Date(dateStr+"T00:00:00");
+  return dateLabelFmt.format(d).replace(".", "");
+}
+
 // ---- Tabs ----
 const tabDirect = document.getElementById("tab-direct");
 const tabConnect = document.getElementById("tab-connect");
@@ -279,9 +339,20 @@ tabConnect.onclick = ()=>{ tabConnect.classList.add("active"); tabDirect.classLi
 // ---- Init dates + autocomplete ----
 const today = new Date().toISOString().slice(0,10);
 document.getElementById("d-date").value = today;
-document.getElementById("c-date").value = today;
 document.getElementById("d-date").min = today;
-document.getElementById("c-date").min = today;
+["c-date-min","c-date-max","c-ret-date-min","c-ret-date-max"].forEach(id=>{
+  const el = document.getElementById(id);
+  el.value = today;
+  el.min = today;
+});
+
+const returnToggle = document.getElementById("c-return-toggle");
+const returnFields = document.getElementById("c-return-fields");
+const minStayField = document.getElementById("c-min-stay-field");
+returnToggle.onchange = ()=>{
+  returnFields.hidden = !returnToggle.checked;
+  minStayField.hidden = !returnToggle.checked;
+};
 
 getAllStations().then(list=>{
   const dl = document.getElementById("stations-list");
@@ -339,23 +410,58 @@ document.getElementById("d-search").onclick = async ()=>{
   }
 };
 
-// ---- Feature 2: connections search (max 3 legs) ----
+// ---- Feature 2: connections search (max 3 legs), over a date range, optional return ----
 document.getElementById("c-search").onclick = async ()=>{
   const originInput = document.getElementById("c-origin").value.trim();
   const destInput = document.getElementById("c-dest").value.trim();
-  const date = document.getElementById("c-date").value;
+  const dateMin = document.getElementById("c-date-min").value;
+  const dateMax = document.getElementById("c-date-max").value;
+  const returnEnabled = document.getElementById("c-return-toggle").checked;
+  const retDateMin = document.getElementById("c-ret-date-min").value;
+  const retDateMax = document.getElementById("c-ret-date-max").value;
   const minSame = Number(document.getElementById("c-min-same").value)||0;
   const minCity = Number(document.getElementById("c-min-city").value)||0;
   const maxConn = Number(document.getElementById("c-max").value)||180;
+  const minStay = Number(document.getElementById("c-min-stay").value)||0;
   const statusEl = document.getElementById("c-status");
   const resultsEl = document.getElementById("c-results");
   resultsEl.innerHTML = "";
-  if (!originInput || !destInput || !date){
-    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une date.</span>';
+
+  if (!originInput || !destInput || !dateMin || !dateMax){
+    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une plage de dates aller.</span>';
+    return;
+  }
+  if (dateMin > dateMax){
+    statusEl.innerHTML = '<span class="err">La date aller « du » doit être avant ou égale à la date « au ».</span>';
+    return;
+  }
+  if (returnEnabled){
+    if (!retDateMin || !retDateMax){
+      statusEl.innerHTML = '<span class="err">Merci de renseigner une plage de dates retour.</span>';
+      return;
+    }
+    if (retDateMin > retDateMax){
+      statusEl.innerHTML = '<span class="err">La date retour « du » doit être avant ou égale à la date « au ».</span>';
+      return;
+    }
+    if (retDateMax < dateMin){
+      statusEl.innerHTML = '<span class="err">La plage de dates retour doit se situer après le début de la plage aller.</span>';
+      return;
+    }
+  }
+
+  const outboundDates = dateRangeList(dateMin, dateMax);
+  const returnDates = returnEnabled ? dateRangeList(retDateMin, retDateMax) : [];
+  if (outboundDates.length > MAX_RANGE_DAYS){
+    statusEl.innerHTML = `<span class="err">Plage de dates aller trop large (${outboundDates.length} jours) — réduisez à ${MAX_RANGE_DAYS} jours maximum.</span>`;
+    return;
+  }
+  if (returnDates.length > MAX_RANGE_DAYS){
+    statusEl.innerHTML = `<span class="err">Plage de dates retour trop large (${returnDates.length} jours) — réduisez à ${MAX_RANGE_DAYS} jours maximum.</span>`;
     return;
   }
 
-  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours (jusqu’à 3 trains)…';
+  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours (jusqu’à 3 trains, plusieurs dates)…';
   try{
     const allStations = await getAllStations();
     const originStations = resolveStations(originInput, allStations);
@@ -368,19 +474,56 @@ document.getElementById("c-search").onclick = async ()=>{
     }
     const originSet = new Set(originStations);
     const destSet = new Set(destStations);
-    const trains = await getDayTrains(date);
+    const connOpts = {minSame, minCity, maxConn};
 
-    const itineraries = findItineraries(trains, originSet, destSet, {minSame, minCity, maxConn});
+    const allDates = Array.from(new Set([...outboundDates, ...returnDates]));
+    await Promise.all(allDates.map(d => getDayTrains(d)));
 
-    statusEl.textContent = `${itineraries.length} itinéraire(s) 100% TGVmax trouvé(s) le ${date} : ${originStations.join(", ")} → ${destStations.join(", ")}.`;
+    let outboundItins = [];
+    for (const d of outboundDates){
+      outboundItins = outboundItins.concat(findItineraries(dayCache.get(d), originSet, destSet, connOpts));
+    }
 
-    if (itineraries.length === 0){
-      resultsEl.innerHTML = '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères.</div>';
+    let returnItins = [];
+    if (returnEnabled){
+      for (const d of returnDates){
+        returnItins = returnItins.concat(findItineraries(dayCache.get(d), destSet, originSet, connOpts));
+      }
+      returnItins.forEach(r => { r.absDepart = absoluteMinutes(r.legs[0].date, r.legs[0].departMin); });
+      returnItins.sort((a,b)=>a.absDepart-b.absDepart);
+      const returnDeparts = returnItins.map(r=>r.absDepart);
+
+      outboundItins.forEach(o => {
+        o.absArrive = absoluteMinutes(o.legs[o.legs.length-1].date, o.legs[o.legs.length-1].arriveMin);
+      });
+      outboundItins = outboundItins.filter(o => {
+        const idx = lowerBound(returnDeparts, o.absArrive + minStay);
+        const matches = returnItins.slice(idx);
+        o.compatibleReturnsTotal = matches.length;
+        o.compatibleReturns = matches.slice(0, 5);
+        return matches.length > 0;
+      });
+    }
+
+    // sort by absolute departure time across the (possibly multi-day) results
+    outboundItins.forEach(o => { o.absDepart = absoluteMinutes(o.legs[0].date, o.legs[0].departMin); });
+    outboundItins.sort((a,b)=> (a.legs.length-b.legs.length) || (a.absDepart-b.absDepart));
+
+    const rangeLabel = dateMin===dateMax ? `le ${dateMin}` : `entre le ${dateMin} et le ${dateMax}`;
+    const retRangeLabel = returnEnabled ? (retDateMin===retDateMax ? `le ${retDateMin}` : `entre le ${retDateMin} et le ${retDateMax}`) : "";
+    statusEl.textContent = returnEnabled
+      ? `${outboundItins.length} aller(s) 100% TGVmax avec un retour compatible trouvé(s) (aller ${rangeLabel}, retour ${retRangeLabel}) : ${originStations.join(", ")} → ${destStations.join(", ")}.`
+      : `${outboundItins.length} itinéraire(s) 100% TGVmax trouvé(s) ${rangeLabel} : ${originStations.join(", ")} → ${destStations.join(", ")}.`;
+
+    if (outboundItins.length === 0){
+      resultsEl.innerHTML = returnEnabled
+        ? '<div class="empty">Aucun aller avec un retour compatible trouvé pour ces critères. Essayez d’élargir les plages de dates ou de réduire le temps mini sur place.</div>'
+        : '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères.</div>';
       return;
     }
 
     const byLegs = {1:[], 2:[], 3:[]};
-    itineraries.forEach(it => byLegs[it.legs.length].push(it));
+    outboundItins.forEach(it => byLegs[it.legs.length].push(it));
 
     let html = "";
     const titles = {1:"Trajets directs", 2:"1 correspondance", 3:"2 correspondances"};
@@ -388,7 +531,7 @@ document.getElementById("c-search").onclick = async ()=>{
       const group = byLegs[n];
       if (group.length === 0) continue;
       html += `<div class="section-title">${titles[n]} (${group.length})</div>`;
-      group.slice(0,15).forEach(it => { html += renderItinerary(it); });
+      group.slice(0,25).forEach(it => { html += renderItinerary(it, {showDate: outboundDates.length>1, returnBlock: returnEnabled}); });
     }
     resultsEl.innerHTML = html;
   }catch(e){
@@ -460,10 +603,16 @@ function findItineraries(trains, originSet, destSet, opts){
   return results.slice(0, 300); // safety cap before grouping/rendering
 }
 
-function renderItinerary(it){
+function renderItinerary(it, opts){
+  opts = opts || {};
   const total = it.arrive - it.depart;
-  let html = `<div class="itin"><div class="itin-head">
-    <div>${minToHHMM(it.legs[0].departMin)} → ${minToHHMM(it.legs[it.legs.length-1].arriveMin)} <span style="color:var(--muted);font-weight:400;">(${durationLabel(total)})</span></div>
+  const compactClass = opts.compact ? " compact" : "";
+  let html = `<div class="itin${compactClass}">`;
+  if (opts.showDate){
+    html += `<div class="date-badge">${formatDateLabel(it.legs[0].date)}</div>`;
+  }
+  html += `<div class="itin-head">
+    <div>${it.legs[0].heure_depart} → ${it.legs[it.legs.length-1].heure_arrivee} <span style="color:var(--muted);font-weight:400;">(${durationLabel(total)})</span></div>
     <div class="legs-count">${it.legs.length===1?"Direct":it.legs.length-1+" correspondance"+(it.legs.length>2?"s":"")}</div>
   </div>`;
   it.legs.forEach((leg, i)=>{
@@ -482,6 +631,16 @@ function renderItinerary(it){
       <span class="train">n°${leg.train_no}${leg.axe?" · "+leg.axe:""} <span class="pill">TGVmax</span></span>
     </div>`;
   });
+
+  if (opts.returnBlock && it.compatibleReturns){
+    html += `<div class="return-block"><div class="return-label">🔁 Retour${it.compatibleReturnsTotal>1?"s":""} compatible${it.compatibleReturnsTotal>1?"s":""} (${it.compatibleReturnsTotal})</div>`;
+    it.compatibleReturns.forEach(r => { html += renderItinerary(r, {showDate:true, compact:true}); });
+    if (it.compatibleReturnsTotal > it.compatibleReturns.length){
+      html += `<div class="more-note">+ ${it.compatibleReturnsTotal - it.compatibleReturns.length} autre(s) retour(s) possible(s)</div>`;
+    }
+    html += `</div>`;
+  }
+
   html += "</div>";
   return html;
 }
