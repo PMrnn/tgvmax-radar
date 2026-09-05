@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TGVmax Radar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#8b1538">
+<link rel="icon" href="icons/favicon.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TGVmax Radar">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#ffffff; --text:#1a1d24; --muted:#6b7280;
+    --border:#e3e5e9; --accent:#8b1538; --accent2:#c4102f; --ok:#1b8a5a; --ok-bg:#e6f6ee;
+    --chip:#f0f1f4; --shadow: 0 1px 3px rgba(16,20,30,.06), 0 1px 2px rgba(16,20,30,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14161b; --panel:#1c1f26; --text:#e9eaed; --muted:#9aa1ac;
+      --border:#2b2f38; --accent:#e2456a; --accent2:#ff5470; --ok:#3ddc97; --ok-bg:#0f2b21;
+      --chip:#262a33; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  header{padding:calc(24px + env(safe-area-inset-top)) 20px 8px;max-width:900px;margin:0 auto;}
+  header h1{margin:0 0 4px;font-size:22px;display:flex;align-items:center;gap:10px;}
+  header h1 .badge{font-size:11px;font-weight:700;background:var(--accent);color:#fff;padding:3px 8px;border-radius:20px;letter-spacing:.03em;}
+  header p{margin:0;color:var(--muted);font-size:13.5px;}
+  main{max-width:900px;margin:0 auto;padding:16px 20px 60px;}
+  nav.tabs{display:flex;gap:8px;margin:18px 0;}
+  nav.tabs button{flex:1;padding:11px 14px;border-radius:10px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;transition:.15s;}
+  nav.tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .field{flex:1;min-width:160px;display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
+  label{font-size:12.5px;color:var(--muted);font-weight:600;}
+  input[type=text],input[type=date],input[type=number]{
+    padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14.5px;outline:none;
+  }
+  input:focus{border-color:var(--accent);}
+  details.adv{margin:4px 0 10px;}
+  details.adv summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0;}
+  .btn{padding:11px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;}
+  .btn:hover{background:var(--accent2);}
+  .btn:disabled{opacity:.5;cursor:default;}
+  .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;}
+  .err{color:var(--accent2);font-weight:600;}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--border);}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;background:var(--ok-bg);color:var(--ok);font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:22px 0 8px;}
+  .itin{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg);}
+  .itin-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;flex-wrap:wrap;gap:6px;}
+  .itin-head .total{font-weight:700;font-size:14.5px;}
+  .itin-head .legs-count{font-size:11.5px;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:20px;}
+  .leg{display:flex;align-items:center;gap:10px;font-size:13.5px;padding:4px 0;}
+  .leg .time{font-variant-numeric:tabular-nums;font-weight:600;min-width:38px;}
+  .leg .arrow{color:var(--muted);}
+  .leg .train{margin-left:auto;color:var(--muted);font-size:12px;}
+  .connect{font-size:11.5px;color:var(--muted);padding:2px 0 2px 4px;border-left:2px dashed var(--border);margin-left:19px;}
+  .empty{color:var(--muted);font-size:13.5px;padding:10px 2px;}
+  footer{max-width:900px;margin:0 auto;padding:0 20px calc(40px + env(safe-area-inset-bottom));color:var(--muted);font-size:11.5px;line-height:1.6;}
+  footer a{color:var(--muted);}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  [hidden]{display:none!important;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚄 TGVmax Radar <span class="badge">non officiel</span></h1>
+  <p>Recherche de places TGVmax libres (MAX JEUNE / MAX SENIOR) à partir des données ouvertes SNCF.</p>
+</header>
+<main>
+  <nav class="tabs">
+    <button id="tab-direct" class="active">Trajets libres depuis une gare</button>
+    <button id="tab-connect">Trajet A → B (jusqu'à 3 trains)</button>
+  </nav>
+
+  <!-- FEATURE 1 -->
+  <section id="panel-direct" class="panel">
+    <div class="row">
+      <div class="field">
+        <label>Ville / gare de départ</label>
+        <input type="text" id="d-origin" list="stations-list" placeholder="Paris, Lyon, Bordeaux…">
+      </div>
+      <div class="field" style="max-width:180px;">
+        <label>Date</label>
+        <input type="date" id="d-date">
+      </div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end;">
+        <button class="btn" id="d-search">Chercher</button>
+      </div>
+    </div>
+    <div class="status" id="d-status"></div>
+    <div id="d-results"></div>
+  </section>
+
+  <!-- FEATURE 2 -->
+  <section id="panel-connect" class="panel" hidden>
+    <div class="row">
+      <div class="field">
+        <label>Départ</label>
+        <input type="text" id="c-origin" list="stations-list" placeholder="Paris">
+      </div>
+      <div class="field">
+        <label>Arrivée</label>
+        <input type="text" id="c-dest" list="stations-list" placeholder="Marseille">
+      </div>
+      <div class="field" style="max-width:180px;">
+        <label>Date</label>
+        <input type="date" id="c-date">
+      </div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end;">
+        <button class="btn" id="c-search">Chercher</button>
+      </div>
+    </div>
+    <details class="adv">
+      <summary>Options avancées</summary>
+      <div class="row" style="margin-top:8px;">
+        <div class="field">
+          <label>Correspondance min. (même gare, minutes)</label>
+          <input type="number" id="c-min-same" value="15" min="0" max="120">
+        </div>
+        <div class="field">
+          <label>Correspondance min. (changement de gare dans la même ville, ex. Paris, minutes)</label>
+          <input type="number" id="c-min-city" value="45" min="0" max="180">
+        </div>
+        <div class="field">
+          <label>Correspondance max. (minutes)</label>
+          <input type="number" id="c-max" value="180" min="30" max="600">
+        </div>
+      </div>
+    </details>
+    <div class="status" id="c-status"></div>
+    <div id="c-results"></div>
+  </section>
+
+  <datalist id="stations-list"></datalist>
+</main>
+<footer>
+  Données : <a href="https://ressources.data.sncf.com/explore/dataset/tgvmax/" target="_blank" rel="noopener">jeu de données « Disponibilité MAX JEUNE / MAX SENIOR » — SNCF Open Data</a>,
+  mis à jour environ une fois par jour, fenêtre glissante de 30 jours. Application non affiliée à la SNCF — vérifiez toujours la disponibilité réelle avant réservation.
+</footer>
+
+<script>
+const API_URL = "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/records";
+const PAGE_SIZE = 100;
+const MAX_PAGES_SAFETY = 60; // hard safety cap (~6000 rows) per day fetch
+
+const PARIS_EXTRA_STATIONS = [
+  "AEROPORT ROISSY CDG 2 TGV",
+  "MARNE LA VALLEE CHESSY",
+  "MASSY PALAISEAU",
+  "MASSY TGV"
+];
+const PARIS_ALIASES = new Set([
+  "paris","montparnasse","austerlitz","nord","est","bercy",
+  "cdg","roissy","massy","marne la vallee","disneyland","disney"
+]);
+
+function normalize(s){
+  return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+}
+
+function buildUrl(params){
+  const usp = new URLSearchParams();
+  for (const [k,v] of Object.entries(params)){
+    if (Array.isArray(v)) v.forEach(x=>usp.append(k,x));
+    else usp.append(k, v);
+  }
+  return API_URL + "?" + usp.toString();
+}
+
+async function fetchJSON(url){
+  const r = await fetch(url);
+  if (!r.ok){
+    let body = "";
+    try{ body = await r.text(); }catch(e){}
+    throw new Error(`Erreur API SNCF (${r.status}) : ${body.slice(0,200)}`);
+  }
+  return r.json();
+}
+
+// ---- Station list (for autocomplete + Paris grouping) ----
+let stationsCache = null;
+async function getAllStations(){
+  if (stationsCache) return stationsCache;
+  const cacheKey = "tgvmax_stations_v1";
+  try{
+    const raw = localStorage.getItem(cacheKey);
+    if (raw){
+      const obj = JSON.parse(raw);
+      if (Date.now() - obj.ts < 24*3600*1000){
+        stationsCache = obj.stations;
+        return stationsCache;
+      }
+    }
+  }catch(e){}
+
+  const set = new Set();
+  let offset = 0;
+  while (true){
+    const url = buildUrl({limit:PAGE_SIZE, offset, select:"origine", group_by:"origine"});
+    const data = await fetchJSON(url);
+    data.results.forEach(r=>set.add(r.origine));
+    if (data.results.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  const arr = Array.from(set).sort();
+  stationsCache = arr;
+  try{ localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(), stations:arr})); }catch(e){}
+  return arr;
+}
+
+function resolveStations(query, allStations){
+  const q = normalize(query);
+  if (q.length < 2) return [];
+  if (PARIS_ALIASES.has(q)){
+    return allStations.filter(s => normalize(s).includes("paris") || PARIS_EXTRA_STATIONS.includes(s));
+  }
+  return allStations.filter(s => normalize(s).includes(q));
+}
+
+// ---- Day trains (TGVmax available only) ----
+const dayCache = new Map();
+async function getDayTrains(date){
+  if (dayCache.has(date)) return dayCache.get(date);
+  const refine = [`date:${date}`, `od_happy_card:OUI`];
+  const first = await fetchJSON(buildUrl({limit:PAGE_SIZE, offset:0, refine}));
+  let results = first.results.slice();
+  const total = Math.min(first.total_count, PAGE_SIZE*MAX_PAGES_SAFETY);
+  const offsets = [];
+  for (let off = PAGE_SIZE; off < total; off += PAGE_SIZE) offsets.push(off);
+  const pages = await Promise.all(offsets.map(off => fetchJSON(buildUrl({limit:PAGE_SIZE, offset:off, refine}))));
+  pages.forEach(p => results = results.concat(p.results));
+
+  // precompute minutes-since-midnight, with overnight rollover on arrival
+  results.forEach(t=>{
+    t.departMin = hhmmToMin(t.heure_depart);
+    let a = hhmmToMin(t.heure_arrivee);
+    if (a < t.departMin) a += 1440;
+    t.arriveMin = a;
+  });
+
+  dayCache.set(date, results);
+  return results;
+}
+
+function hhmmToMin(hhmm){
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60+m;
+}
+function minToHHMM(min){
+  min = ((min % 1440) + 1440) % 1440;
+  const h = Math.floor(min/60), m = min%60;
+  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+function durationLabel(mins){
+  const h = Math.floor(mins/60), m = mins%60;
+  return h>0 ? `${h}h${String(m).padStart(2,"0")}` : `${m}min`;
+}
+
+// ---- Tabs ----
+const tabDirect = document.getElementById("tab-direct");
+const tabConnect = document.getElementById("tab-connect");
+const panelDirect = document.getElementById("panel-direct");
+const panelConnect = document.getElementById("panel-connect");
+tabDirect.onclick = ()=>{ tabDirect.classList.add("active"); tabConnect.classList.remove("active"); panelDirect.hidden=false; panelConnect.hidden=true; };
+tabConnect.onclick = ()=>{ tabConnect.classList.add("active"); tabDirect.classList.remove("active"); panelConnect.hidden=false; panelDirect.hidden=true; };
+
+// ---- Init dates + autocomplete ----
+const today = new Date().toISOString().slice(0,10);
+document.getElementById("d-date").value = today;
+document.getElementById("c-date").value = today;
+document.getElementById("d-date").min = today;
+document.getElementById("c-date").min = today;
+
+getAllStations().then(list=>{
+  const dl = document.getElementById("stations-list");
+  dl.innerHTML = "";
+  list.forEach(s=>{
+    const opt = document.createElement("option");
+    opt.value = s;
+    dl.appendChild(opt);
+  });
+}).catch(e=>console.warn("Impossible de charger la liste des gares :", e));
+
+// ---- Feature 1: direct free trains from a departure town ----
+document.getElementById("d-search").onclick = async ()=>{
+  const originInput = document.getElementById("d-origin").value.trim();
+  const date = document.getElementById("d-date").value;
+  const statusEl = document.getElementById("d-status");
+  const resultsEl = document.getElementById("d-results");
+  resultsEl.innerHTML = "";
+  if (!originInput || !date){ statusEl.innerHTML = '<span class="err">Merci de renseigner une ville de départ et une date.</span>'; return; }
+
+  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours…';
+  try{
+    const allStations = await getAllStations();
+    const originStations = resolveStations(originInput, allStations);
+    if (originStations.length === 0){
+      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(originInput)} ».</span>`;
+      return;
+    }
+    const originSet = new Set(originStations);
+    const trains = await getDayTrains(date);
+    const matches = trains.filter(t => originSet.has(t.origine)).sort((a,b)=>a.departMin-b.departMin);
+
+    statusEl.textContent = `${matches.length} train(s) TGVmax libre(s) le ${date} depuis : ${originStations.join(", ")}.`;
+
+    if (matches.length === 0){
+      resultsEl.innerHTML = '<div class="empty">Aucun train avec place TGVmax libre trouvé pour ces critères.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Départ</th><th>Arrivée</th><th>Destination</th><th>Durée</th><th>Train</th><th></th></tr></thead><tbody>';
+    for (const t of matches){
+      html += `<tr>
+        <td>${t.heure_depart}<br><span style="color:var(--muted);font-size:11.5px;">${t.origine}</span></td>
+        <td>${t.heure_arrivee}</td>
+        <td>${t.destination}</td>
+        <td>${durationLabel(t.arriveMin - t.departMin)}</td>
+        <td style="color:var(--muted);">n°${t.train_no}${t.axe ? " · "+t.axe : ""}</td>
+        <td><span class="pill">TGVmax libre</span></td>
+      </tr>`;
+    }
+    html += "</tbody></table>";
+    resultsEl.innerHTML = html;
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
+  }
+};
+
+// ---- Feature 2: connections search (max 3 legs) ----
+document.getElementById("c-search").onclick = async ()=>{
+  const originInput = document.getElementById("c-origin").value.trim();
+  const destInput = document.getElementById("c-dest").value.trim();
+  const date = document.getElementById("c-date").value;
+  const minSame = Number(document.getElementById("c-min-same").value)||0;
+  const minCity = Number(document.getElementById("c-min-city").value)||0;
+  const maxConn = Number(document.getElementById("c-max").value)||180;
+  const statusEl = document.getElementById("c-status");
+  const resultsEl = document.getElementById("c-results");
+  resultsEl.innerHTML = "";
+  if (!originInput || !destInput || !date){
+    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une date.</span>';
+    return;
+  }
+
+  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours (jusqu’à 3 trains)…';
+  try{
+    const allStations = await getAllStations();
+    const originStations = resolveStations(originInput, allStations);
+    const destStations = resolveStations(destInput, allStations);
+    if (originStations.length === 0){
+      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(originInput)} ».</span>`; return;
+    }
+    if (destStations.length === 0){
+      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(destInput)} ».</span>`; return;
+    }
+    const originSet = new Set(originStations);
+    const destSet = new Set(destStations);
+    const trains = await getDayTrains(date);
+
+    const itineraries = findItineraries(trains, originSet, destSet, {minSame, minCity, maxConn});
+
+    statusEl.textContent = `${itineraries.length} itinéraire(s) 100% TGVmax trouvé(s) le ${date} : ${originStations.join(", ")} → ${destStations.join(", ")}.`;
+
+    if (itineraries.length === 0){
+      resultsEl.innerHTML = '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères.</div>';
+      return;
+    }
+
+    const byLegs = {1:[], 2:[], 3:[]};
+    itineraries.forEach(it => byLegs[it.legs.length].push(it));
+
+    let html = "";
+    const titles = {1:"Trajets directs", 2:"1 correspondance", 3:"2 correspondances"};
+    for (const n of [1,2,3]){
+      const group = byLegs[n];
+      if (group.length === 0) continue;
+      html += `<div class="section-title">${titles[n]} (${group.length})</div>`;
+      group.slice(0,15).forEach(it => { html += renderItinerary(it); });
+    }
+    resultsEl.innerHTML = html;
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
+  }
+};
+
+function findItineraries(trains, originSet, destSet, opts){
+  const {minSame, minCity, maxConn} = opts;
+
+  const byOrigineIata = new Map();
+  const byOrigineName = new Map();
+  for (const t of trains){
+    if (!byOrigineIata.has(t.origine_iata)) byOrigineIata.set(t.origine_iata, []);
+    byOrigineIata.get(t.origine_iata).push(t);
+    if (!byOrigineName.has(t.origine)) byOrigineName.set(t.origine, []);
+    byOrigineName.get(t.origine).push(t);
+  }
+
+  function candidatesFrom(leg){
+    const out = [];
+    (byOrigineIata.get(leg.destination_iata)||[]).forEach(t2=>{
+      if (t2 === leg) return;
+      const gap = t2.departMin - leg.arriveMin;
+      if (gap >= minSame && gap <= maxConn) out.push(t2);
+    });
+    (byOrigineName.get(leg.destination)||[]).forEach(t2=>{
+      if (t2.origine_iata === leg.destination_iata) return; // already covered (same physical station)
+      const gap = t2.departMin - leg.arriveMin;
+      if (gap >= minCity && gap <= maxConn) out.push(t2);
+    });
+    return out;
+  }
+
+  const legsFromOrigin = trains.filter(t => originSet.has(t.origine));
+  const results = [];
+  const seen = new Set();
+
+  function tryAdd(legs){
+    const key = legs.map(t=>t.date+"#"+t.train_no+"#"+t.origine_iata+"#"+t.destination_iata).join(">");
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({legs, depart:legs[0].departMin, arrive:legs[legs.length-1].arriveMin});
+  }
+
+  for (const leg1 of legsFromOrigin){
+    if (destSet.has(leg1.destination)){
+      tryAdd([leg1]);
+    }
+    const c1 = candidatesFrom(leg1);
+    for (const leg2 of c1){
+      if (leg2.origine_iata === leg1.origine_iata) continue;
+      if (destSet.has(leg2.destination)){
+        tryAdd([leg1, leg2]);
+        continue;
+      }
+      const c2 = candidatesFrom(leg2);
+      for (const leg3 of c2){
+        if (leg3.origine_iata === leg1.origine_iata || leg3.origine_iata === leg2.origine_iata) continue;
+        if (destSet.has(leg3.destination)){
+          tryAdd([leg1, leg2, leg3]);
+        }
+      }
+    }
+  }
+
+  results.sort((a,b)=> (a.legs.length - b.legs.length) || ((a.arrive-a.depart) - (b.arrive-b.depart)) || (a.depart-b.depart));
+  return results.slice(0, 300); // safety cap before grouping/rendering
+}
+
+function renderItinerary(it){
+  const total = it.arrive - it.depart;
+  let html = `<div class="itin"><div class="itin-head">
+    <div>${minToHHMM(it.legs[0].departMin)} → ${minToHHMM(it.legs[it.legs.length-1].arriveMin)} <span style="color:var(--muted);font-weight:400;">(${durationLabel(total)})</span></div>
+    <div class="legs-count">${it.legs.length===1?"Direct":it.legs.length-1+" correspondance"+(it.legs.length>2?"s":"")}</div>
+  </div>`;
+  it.legs.forEach((leg, i)=>{
+    if (i>0){
+      const prev = it.legs[i-1];
+      const gap = leg.departMin - prev.arriveMin;
+      const sameStation = leg.origine_iata === prev.destination_iata;
+      html += `<div class="connect">⏱ correspondance ${durationLabel(gap)}${sameStation ? "" : " · changement de gare à "+leg.origine}</div>`;
+    }
+    html += `<div class="leg">
+      <span class="time">${leg.heure_depart}</span>
+      <span>${leg.origine}</span>
+      <span class="arrow">→</span>
+      <span class="time">${leg.heure_arrivee}</span>
+      <span>${leg.destination}</span>
+      <span class="train">n°${leg.train_no}${leg.axe?" · "+leg.axe:""} <span class="pill">TGVmax</span></span>
+    </div>`;
+  });
+  html += "</div>";
+  return html;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// ---- PWA: register service worker (app-shell offline cache; API calls always live) ----
+if ("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(e=>console.warn("SW registration failed:", e));
+  });
+}
+</script>
+</body>
+</html>
