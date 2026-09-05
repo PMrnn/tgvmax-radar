@@ -107,6 +107,27 @@
         <button class="btn" id="d-search">Chercher</button>
       </div>
     </div>
+    <details class="adv">
+      <summary>Options avancées</summary>
+      <div class="row" style="margin-top:8px;">
+        <div class="field">
+          <label>Départ au plus tôt</label>
+          <input type="time" id="d-dep-min">
+        </div>
+        <div class="field">
+          <label>Départ au plus tard</label>
+          <input type="time" id="d-dep-max">
+        </div>
+        <div class="field">
+          <label>Arrivée au plus tôt</label>
+          <input type="time" id="d-arr-min">
+        </div>
+        <div class="field">
+          <label>Arrivée au plus tard</label>
+          <input type="time" id="d-arr-max">
+        </div>
+      </div>
+    </details>
     <div class="status" id="d-status"></div>
     <div id="d-results"></div>
   </section>
@@ -168,6 +189,24 @@
         <div class="field" id="c-min-stay-field" hidden>
           <label>Temps mini sur place avant le retour (minutes)</label>
           <input type="number" id="c-min-stay" value="60" min="0" max="10080">
+        </div>
+      </div>
+      <div class="row" style="margin-top:2px;">
+        <div class="field">
+          <label>Départ au plus tôt <span style="font-weight:400;">(aller et retour)</span></label>
+          <input type="time" id="c-dep-min">
+        </div>
+        <div class="field">
+          <label>Départ au plus tard <span style="font-weight:400;">(aller et retour)</span></label>
+          <input type="time" id="c-dep-max">
+        </div>
+        <div class="field">
+          <label>Arrivée au plus tôt <span style="font-weight:400;">(aller et retour)</span></label>
+          <input type="time" id="c-arr-min">
+        </div>
+        <div class="field">
+          <label>Arrivée au plus tard <span style="font-weight:400;">(aller et retour)</span></label>
+          <input type="time" id="c-arr-max">
         </div>
       </div>
     </details>
@@ -328,6 +367,14 @@ function formatDateLabel(dateStr){
   return dateLabelFmt.format(d).replace(".", "");
 }
 
+// hhmm is a plain "HH:MM" clock time (string compare works since always zero-padded);
+// min/max are optional "HH:MM" strings from a <input type=time> — empty means "no constraint".
+function timeInWindow(hhmm, min, max){
+  if (min && hhmm < min) return false;
+  if (max && hhmm > max) return false;
+  return true;
+}
+
 // ---- Tabs ----
 const tabDirect = document.getElementById("tab-direct");
 const tabConnect = document.getElementById("tab-connect");
@@ -368,6 +415,10 @@ getAllStations().then(list=>{
 document.getElementById("d-search").onclick = async ()=>{
   const originInput = document.getElementById("d-origin").value.trim();
   const date = document.getElementById("d-date").value;
+  const depMin = document.getElementById("d-dep-min").value;
+  const depMax = document.getElementById("d-dep-max").value;
+  const arrMin = document.getElementById("d-arr-min").value;
+  const arrMax = document.getElementById("d-arr-max").value;
   const statusEl = document.getElementById("d-status");
   const resultsEl = document.getElementById("d-results");
   resultsEl.innerHTML = "";
@@ -383,12 +434,15 @@ document.getElementById("d-search").onclick = async ()=>{
     }
     const originSet = new Set(originStations);
     const trains = await getDayTrains(date);
-    const matches = trains.filter(t => originSet.has(t.origine)).sort((a,b)=>a.departMin-b.departMin);
+    const matches = trains
+      .filter(t => originSet.has(t.origine))
+      .filter(t => timeInWindow(t.heure_depart, depMin, depMax) && timeInWindow(t.heure_arrivee, arrMin, arrMax))
+      .sort((a,b)=>a.departMin-b.departMin);
 
     statusEl.textContent = `${matches.length} train(s) TGVmax libre(s) le ${date} depuis : ${originStations.join(", ")}.`;
 
     if (matches.length === 0){
-      resultsEl.innerHTML = '<div class="empty">Aucun train avec place TGVmax libre trouvé pour ces critères.</div>';
+      resultsEl.innerHTML = '<div class="empty">Aucun train avec place TGVmax libre trouvé pour ces critères. Essayez d’élargir la fenêtre horaire.</div>';
       return;
     }
     let html = '<table><thead><tr><th>Départ</th><th>Arrivée</th><th>Destination</th><th>Durée</th><th>Train</th><th></th></tr></thead><tbody>';
@@ -423,6 +477,10 @@ document.getElementById("c-search").onclick = async ()=>{
   const minCity = Number(document.getElementById("c-min-city").value)||0;
   const maxConn = Number(document.getElementById("c-max").value)||180;
   const minStay = Number(document.getElementById("c-min-stay").value)||0;
+  const depMin = document.getElementById("c-dep-min").value;
+  const depMax = document.getElementById("c-dep-max").value;
+  const arrMin = document.getElementById("c-arr-min").value;
+  const arrMax = document.getElementById("c-arr-max").value;
   const statusEl = document.getElementById("c-status");
   const resultsEl = document.getElementById("c-results");
   resultsEl.innerHTML = "";
@@ -479,16 +537,21 @@ document.getElementById("c-search").onclick = async ()=>{
     const allDates = Array.from(new Set([...outboundDates, ...returnDates]));
     await Promise.all(allDates.map(d => getDayTrains(d)));
 
+    const inTimeWindow = it => timeInWindow(it.legs[0].heure_depart, depMin, depMax)
+      && timeInWindow(it.legs[it.legs.length-1].heure_arrivee, arrMin, arrMax);
+
     let outboundItins = [];
     for (const d of outboundDates){
       outboundItins = outboundItins.concat(findItineraries(dayCache.get(d), originSet, destSet, connOpts));
     }
+    outboundItins = outboundItins.filter(inTimeWindow);
 
     let returnItins = [];
     if (returnEnabled){
       for (const d of returnDates){
         returnItins = returnItins.concat(findItineraries(dayCache.get(d), destSet, originSet, connOpts));
       }
+      returnItins = returnItins.filter(inTimeWindow);
       returnItins.forEach(r => { r.absDepart = absoluteMinutes(r.legs[0].date, r.legs[0].departMin); });
       returnItins.sort((a,b)=>a.absDepart-b.absDepart);
       const returnDeparts = returnItins.map(r=>r.absDepart);
@@ -517,8 +580,8 @@ document.getElementById("c-search").onclick = async ()=>{
 
     if (outboundItins.length === 0){
       resultsEl.innerHTML = returnEnabled
-        ? '<div class="empty">Aucun aller avec un retour compatible trouvé pour ces critères. Essayez d’élargir les plages de dates ou de réduire le temps mini sur place.</div>'
-        : '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères.</div>';
+        ? '<div class="empty">Aucun aller avec un retour compatible trouvé pour ces critères. Essayez d’élargir les plages de dates, la fenêtre horaire, ou de réduire le temps mini sur place.</div>'
+        : '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères. Essayez d’élargir la plage de dates ou la fenêtre horaire.</div>';
       return;
     }
 
