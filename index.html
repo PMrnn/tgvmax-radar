@@ -47,6 +47,14 @@
   details.adv summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0;}
   .check-row{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:2px 0 14px;cursor:pointer;}
   .check-row input{width:16px;height:16px;accent-color:var(--accent);}
+  .windows-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
+  .window-row{display:flex;align-items:center;gap:6px;}
+  .window-row input[type=time]{flex:1;min-width:0;}
+  .window-row span{color:var(--muted);font-size:12.5px;}
+  .win-remove{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);width:30px;height:30px;flex:0 0 auto;cursor:pointer;font-size:13px;}
+  .win-remove:hover{color:var(--accent2);border-color:var(--accent2);}
+  .btn-add-window{background:none;border:1px dashed var(--border);border-radius:9px;color:var(--accent);font-size:12.5px;font-weight:600;padding:7px 12px;cursor:pointer;align-self:flex-start;}
+  .btn-add-window:hover{border-color:var(--accent);}
   .date-badge{display:inline-block;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:20px;margin-bottom:6px;}
   .return-block{margin-top:10px;padding:10px 0 0;border-top:1px dashed var(--border);}
   .return-block .return-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
@@ -110,21 +118,15 @@
     <details class="adv">
       <summary>Options avancées</summary>
       <div class="row" style="margin-top:8px;">
-        <div class="field">
-          <label>Départ au plus tôt</label>
-          <input type="time" id="d-dep-min">
+        <div class="field" style="flex:1 1 260px;">
+          <label>Fenêtres de départ acceptées <span style="font-weight:400;">(vide = toute heure ; plusieurs fenêtres = « ou »)</span></label>
+          <div class="windows-list" id="d-dep-windows"></div>
+          <button type="button" class="btn-add-window" data-target="d-dep-windows">+ Ajouter une fenêtre</button>
         </div>
-        <div class="field">
-          <label>Départ au plus tard</label>
-          <input type="time" id="d-dep-max">
-        </div>
-        <div class="field">
-          <label>Arrivée au plus tôt</label>
-          <input type="time" id="d-arr-min">
-        </div>
-        <div class="field">
-          <label>Arrivée au plus tard</label>
-          <input type="time" id="d-arr-max">
+        <div class="field" style="flex:1 1 260px;">
+          <label>Fenêtres d'arrivée acceptées <span style="font-weight:400;">(vide = toute heure ; plusieurs fenêtres = « ou »)</span></label>
+          <div class="windows-list" id="d-arr-windows"></div>
+          <button type="button" class="btn-add-window" data-target="d-arr-windows">+ Ajouter une fenêtre</button>
         </div>
       </div>
     </details>
@@ -192,21 +194,15 @@
         </div>
       </div>
       <div class="row" style="margin-top:2px;">
-        <div class="field">
-          <label>Départ au plus tôt <span style="font-weight:400;">(aller et retour)</span></label>
-          <input type="time" id="c-dep-min">
+        <div class="field" style="flex:1 1 260px;">
+          <label>Fenêtres de départ acceptées <span style="font-weight:400;">(aller et retour ; vide = toute heure ; plusieurs = « ou »)</span></label>
+          <div class="windows-list" id="c-dep-windows"></div>
+          <button type="button" class="btn-add-window" data-target="c-dep-windows">+ Ajouter une fenêtre</button>
         </div>
-        <div class="field">
-          <label>Départ au plus tard <span style="font-weight:400;">(aller et retour)</span></label>
-          <input type="time" id="c-dep-max">
-        </div>
-        <div class="field">
-          <label>Arrivée au plus tôt <span style="font-weight:400;">(aller et retour)</span></label>
-          <input type="time" id="c-arr-min">
-        </div>
-        <div class="field">
-          <label>Arrivée au plus tard <span style="font-weight:400;">(aller et retour)</span></label>
-          <input type="time" id="c-arr-max">
+        <div class="field" style="flex:1 1 260px;">
+          <label>Fenêtres d'arrivée acceptées <span style="font-weight:400;">(aller et retour ; vide = toute heure ; plusieurs = « ou »)</span></label>
+          <div class="windows-list" id="c-arr-windows"></div>
+          <button type="button" class="btn-add-window" data-target="c-arr-windows">+ Ajouter une fenêtre</button>
         </div>
       </div>
     </details>
@@ -367,13 +363,36 @@ function formatDateLabel(dateStr){
   return dateLabelFmt.format(d).replace(".", "");
 }
 
-// hhmm is a plain "HH:MM" clock time (string compare works since always zero-padded);
-// min/max are optional "HH:MM" strings from a <input type=time> — empty means "no constraint".
-function timeInWindow(hhmm, min, max){
-  if (min && hhmm < min) return false;
-  if (max && hhmm > max) return false;
-  return true;
+// hhmm is a plain "HH:MM" clock time (string compare works since always zero-padded).
+// windows is an array of {from, to} (each optional "HH:MM"); matches if it falls in ANY window (OR).
+// An empty windows array means "no constraint" (matches everything).
+function timeMatchesWindows(hhmm, windows){
+  if (!windows || windows.length === 0) return true;
+  return windows.some(w => (!w.from || hhmm >= w.from) && (!w.to || hhmm <= w.to));
 }
+
+// ---- Reusable "list of time windows" widget (add/remove rows, read back values) ----
+function addWindowRow(containerId, from, to){
+  const container = document.getElementById(containerId);
+  const row = document.createElement("div");
+  row.className = "window-row";
+  row.innerHTML = `<input type="time" class="win-from" value="${from||""}"><span>–</span><input type="time" class="win-to" value="${to||""}"><button type="button" class="win-remove" aria-label="Supprimer cette fenêtre">✕</button>`;
+  row.querySelector(".win-remove").onclick = ()=> row.remove();
+  container.appendChild(row);
+}
+function getWindows(containerId){
+  const wins = [];
+  document.getElementById(containerId).querySelectorAll(".window-row").forEach(row=>{
+    const from = row.querySelector(".win-from").value;
+    const to = row.querySelector(".win-to").value;
+    if (from || to) wins.push({from, to});
+  });
+  return wins;
+}
+document.querySelectorAll(".btn-add-window").forEach(btn=>{
+  btn.onclick = ()=> addWindowRow(btn.dataset.target);
+});
+["d-dep-windows","d-arr-windows","c-dep-windows","c-arr-windows"].forEach(id=>addWindowRow(id));
 
 // ---- Tabs ----
 const tabDirect = document.getElementById("tab-direct");
@@ -415,10 +434,8 @@ getAllStations().then(list=>{
 document.getElementById("d-search").onclick = async ()=>{
   const originInput = document.getElementById("d-origin").value.trim();
   const date = document.getElementById("d-date").value;
-  const depMin = document.getElementById("d-dep-min").value;
-  const depMax = document.getElementById("d-dep-max").value;
-  const arrMin = document.getElementById("d-arr-min").value;
-  const arrMax = document.getElementById("d-arr-max").value;
+  const depWindows = getWindows("d-dep-windows");
+  const arrWindows = getWindows("d-arr-windows");
   const statusEl = document.getElementById("d-status");
   const resultsEl = document.getElementById("d-results");
   resultsEl.innerHTML = "";
@@ -436,7 +453,7 @@ document.getElementById("d-search").onclick = async ()=>{
     const trains = await getDayTrains(date);
     const matches = trains
       .filter(t => originSet.has(t.origine))
-      .filter(t => timeInWindow(t.heure_depart, depMin, depMax) && timeInWindow(t.heure_arrivee, arrMin, arrMax))
+      .filter(t => timeMatchesWindows(t.heure_depart, depWindows) && timeMatchesWindows(t.heure_arrivee, arrWindows))
       .sort((a,b)=>a.departMin-b.departMin);
 
     statusEl.textContent = `${matches.length} train(s) TGVmax libre(s) le ${date} depuis : ${originStations.join(", ")}.`;
@@ -477,10 +494,8 @@ document.getElementById("c-search").onclick = async ()=>{
   const minCity = Number(document.getElementById("c-min-city").value)||0;
   const maxConn = Number(document.getElementById("c-max").value)||180;
   const minStay = Number(document.getElementById("c-min-stay").value)||0;
-  const depMin = document.getElementById("c-dep-min").value;
-  const depMax = document.getElementById("c-dep-max").value;
-  const arrMin = document.getElementById("c-arr-min").value;
-  const arrMax = document.getElementById("c-arr-max").value;
+  const depWindows = getWindows("c-dep-windows");
+  const arrWindows = getWindows("c-arr-windows");
   const statusEl = document.getElementById("c-status");
   const resultsEl = document.getElementById("c-results");
   resultsEl.innerHTML = "";
@@ -537,8 +552,8 @@ document.getElementById("c-search").onclick = async ()=>{
     const allDates = Array.from(new Set([...outboundDates, ...returnDates]));
     await Promise.all(allDates.map(d => getDayTrains(d)));
 
-    const inTimeWindow = it => timeInWindow(it.legs[0].heure_depart, depMin, depMax)
-      && timeInWindow(it.legs[it.legs.length-1].heure_arrivee, arrMin, arrMax);
+    const inTimeWindow = it => timeMatchesWindows(it.legs[0].heure_depart, depWindows)
+      && timeMatchesWindows(it.legs[it.legs.length-1].heure_arrivee, arrWindows);
 
     let outboundItins = [];
     for (const d of outboundDates){
