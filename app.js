@@ -340,7 +340,7 @@ function activateTab(tab, panel){
   allPanels.forEach(p=>p.hidden = (p!==panel));
 }
 tabDirect.onclick = ()=> activateTab(tabDirect, panelDirect);
-tabConnect.onclick = ()=> activateTab(tabConnect, panelConnect);
+tabConnect.onclick = ()=>{ activateTab(tabConnect, panelConnect); maybeAutoOpenPlanModal(); };
 tabAlerts.onclick = ()=>{ activateTab(tabAlerts, panelAlerts); loadAlerts(); };
 
 // ---- Init: dates, pickers, weekly plan, return-date auto-bump ----
@@ -361,29 +361,93 @@ returnToggle.onchange = ()=>{
   minStayField.hidden = !returnToggle.checked;
 };
 
+// Keeps the retour dates from ever being scheduled before the aller: whenever either
+// aller date changes, the retour "du" (and, transitively, "au") snap forward to the
+// latest possible aller day (dateMax) if they'd otherwise precede it.
 function bumpReturnDates(){
-  const dateMinEl = document.getElementById("c-date-min");
+  const dateMaxEl = document.getElementById("c-date-max");
   const retMinEl = document.getElementById("c-ret-date-min");
   const retMaxEl = document.getElementById("c-ret-date-max");
-  retMinEl.min = dateMinEl.value;
-  if (retMinEl.value < dateMinEl.value) retMinEl.value = dateMinEl.value;
+  if (!dateMaxEl.value) return;
+  retMinEl.min = dateMaxEl.value;
+  if (!retMinEl.value || retMinEl.value < dateMaxEl.value) retMinEl.value = dateMaxEl.value;
   retMaxEl.min = retMinEl.value;
-  if (retMaxEl.value < retMinEl.value) retMaxEl.value = retMinEl.value;
+  if (!retMaxEl.value || retMaxEl.value < retMinEl.value) retMaxEl.value = retMinEl.value;
 }
-document.getElementById("c-date-min").addEventListener("change", bumpReturnDates);
+["c-date-min","c-date-max"].forEach(id=>{
+  const el = document.getElementById(id);
+  el.addEventListener("change", bumpReturnDates);
+  el.addEventListener("input", bumpReturnDates);
+});
 document.getElementById("c-ret-date-min").addEventListener("change", ()=>{
   const retMinEl = document.getElementById("c-ret-date-min");
   const retMaxEl = document.getElementById("c-ret-date-max");
   retMaxEl.min = retMinEl.value;
   if (retMaxEl.value < retMinEl.value) retMaxEl.value = retMinEl.value;
 });
+bumpReturnDates();
 
-renderPlanGrid(loadWeeklySchedule());
+function summarizeSchedule(schedule){
+  const weekdays = WEEKDAY_ORDER.filter(d=>!WEEKEND_KEYS.has(d));
+  const weekends = WEEKDAY_ORDER.filter(d=>WEEKEND_KEYS.has(d));
+  const sameJSON = (a,b)=> JSON.stringify(a)===JSON.stringify(b);
+  const wdRef = schedule[weekdays[0]];
+  const weekdaysUniform = weekdays.every(d=> sameJSON(schedule[d], wdRef));
+  const weRef = schedule[weekends[0]];
+  const weekendUniform = weekends.every(d=> sameJSON(schedule[d], weRef));
+  const combineLabel = schedule.combine === "AND" ? "et" : "ou";
+  function describeDay(day){
+    const depEmpty = !day.dep || day.dep.length===0;
+    const arrEmpty = !day.arr || day.arr.length===0;
+    if (depEmpty && arrEmpty) return "toute heure";
+    const parts = [];
+    if (!depEmpty) parts.push("départ " + formatWindowsSummary(day.dep));
+    if (!arrEmpty) parts.push("arrivée " + formatWindowsSummary(day.arr));
+    return parts.join(` ${combineLabel} `);
+  }
+  if (weekdaysUniform && weekendUniform){
+    return `Semaine : ${describeDay(wdRef)} · Week-end : ${describeDay(weRef)}`;
+  }
+  return "Disponibilités personnalisées par jour — cliquez sur Modifier pour le détail.";
+}
+function updatePlanSummary(schedule){
+  document.getElementById("plan-summary-text").textContent = summarizeSchedule(schedule);
+}
+
+const planModal = document.getElementById("plan-modal");
+function openPlanModal(){ planModal.hidden = false; }
+function closePlanModal(){
+  const schedule = readScheduleFromUI();
+  saveWeeklySchedule(schedule);
+  updatePlanSummary(schedule);
+  planModal.hidden = true;
+}
+document.getElementById("plan-open").onclick = openPlanModal;
+document.getElementById("plan-modal-close").onclick = closePlanModal;
+document.getElementById("plan-done").onclick = closePlanModal;
+planModal.addEventListener("click", (e)=>{ if (e.target === planModal) closePlanModal(); });
+document.addEventListener("keydown", (e)=>{ if (e.key === "Escape" && !planModal.hidden) closePlanModal(); });
+
+{
+  const initialSchedule = loadWeeklySchedule();
+  renderPlanGrid(initialSchedule);
+  updatePlanSummary(initialSchedule);
+}
 document.getElementById("plan-reset").onclick = ()=>{
   const def = defaultWeeklySchedule();
   renderPlanGrid(def);
   saveWeeklySchedule(def);
+  updatePlanSummary(def);
 };
+
+// Ask for availability once, the first time the connections tab is opened.
+const PLAN_SEEN_KEY = "tgvmax_plan_seen";
+function maybeAutoOpenPlanModal(){
+  if (!localStorage.getItem(PLAN_SEEN_KEY)){
+    openPlanModal();
+    try{ localStorage.setItem(PLAN_SEEN_KEY, "1"); }catch(e){}
+  }
+}
 
 getStationsCatalog().then(()=>{
   pickers.dOrigin = createPicker("d-origin-picker");
@@ -836,7 +900,12 @@ async function createWatch(criteria, label){
 
 function formatWindowsSummary(windows){
   if (!windows || windows.length===0) return "toute heure";
-  return windows.map(w => `${w.from||"00:00"}–${w.to||"24:00"}`).join(" ou ");
+  return windows.map(w => {
+    if (w.from && w.to) return `${w.from}–${w.to}`;
+    if (w.from) return `après ${w.from}`;
+    if (w.to) return `avant ${w.to}`;
+    return "toute heure";
+  }).join(" ou ");
 }
 function formatCriteriaSummary(c){
   if (c.type === "direct"){

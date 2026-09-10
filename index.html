@@ -120,6 +120,14 @@
   .picker-row .picker-row-map{margin-left:auto;font-size:11px;color:var(--muted);}
 
   /* Weekly planning */
+  .plan-summary-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:16px;}
+  .modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;overflow-y:auto;}
+  .modal-box{background:var(--panel);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.3);max-width:720px;width:100%;max-height:90vh;display:flex;flex-direction:column;}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px 10px;}
+  .modal-close{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);width:30px;height:30px;flex:0 0 auto;cursor:pointer;font-size:14px;}
+  .modal-close:hover{color:var(--accent2);border-color:var(--accent2);}
+  .modal-body{padding:4px 18px 14px;overflow-y:auto;}
+  .modal-foot{padding:12px 18px 18px;display:flex;justify-content:flex-end;}
   .plan-grid{display:flex;flex-direction:column;gap:10px;}
   .plan-day{border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .plan-day-head{font-weight:700;font-size:13.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
@@ -191,23 +199,12 @@
 
   <!-- FEATURE 2 -->
   <section id="panel-connect" class="panel" hidden>
-    <div class="panel" style="box-shadow:none;background:var(--bg);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-weight:700;font-size:14.5px;">📅 Vos disponibilités</div>
-          <div style="color:var(--muted);font-size:12px;margin-top:2px;">Par défaut : week-end libre toute la journée, semaine = arrivée avant 9h ou départ après 18h (horaires de bureau). Modifiable ci-dessous, mémorisé pour la prochaine fois.</div>
-        </div>
-        <button type="button" class="btn-sm" id="plan-reset">Réinitialiser les valeurs par défaut</button>
+    <div class="plan-summary-bar">
+      <div>
+        <div style="font-weight:700;font-size:14.5px;">📅 Vos disponibilités</div>
+        <div id="plan-summary-text" style="color:var(--muted);font-size:12px;margin-top:2px;"></div>
       </div>
-      <div class="plan-combine">
-        Un trajet est accepté si
-        <select id="plan-combine-mode">
-          <option value="OR">départ OK OU arrivée OK</option>
-          <option value="AND">départ OK ET arrivée OK</option>
-        </select>
-        (par rapport aux fenêtres du jour concerné)
-      </div>
-      <div class="plan-grid" id="plan-grid"></div>
+      <button type="button" class="btn-sm" id="plan-open">Modifier</button>
     </div>
 
     <div class="row">
@@ -299,6 +296,35 @@
   et <a href="https://ressources.data.sncf.com/explore/dataset/gares-de-voyageurs/" target="_blank" rel="noopener">« Gares de voyageurs »</a> (géolocalisation, pour la carte),
   mis à jour environ une fois par jour, fenêtre glissante de 30 jours. Application non affiliée à la SNCF — vérifiez toujours la disponibilité réelle avant réservation.
 </footer>
+
+<div class="modal-overlay" id="plan-modal" hidden>
+  <div class="modal-box">
+    <div class="modal-head">
+      <div>
+        <div style="font-weight:700;font-size:15px;">📅 Vos disponibilités</div>
+        <div style="color:var(--muted);font-size:12px;margin-top:2px;">Par défaut : week-end libre toute la journée, semaine = arrivée avant 9h ou départ après 18h (horaires de bureau).</div>
+      </div>
+      <button type="button" class="modal-close" id="plan-modal-close" aria-label="Fermer">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="row" style="margin-bottom:4px;">
+        <button type="button" class="btn-sm" id="plan-reset">Réinitialiser les valeurs par défaut</button>
+      </div>
+      <div class="plan-combine">
+        Un trajet est accepté si
+        <select id="plan-combine-mode">
+          <option value="OR">départ OK OU arrivée OK</option>
+          <option value="AND">départ OK ET arrivée OK</option>
+        </select>
+        (par rapport aux fenêtres du jour concerné)
+      </div>
+      <div class="plan-grid" id="plan-grid"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn" id="plan-done">Terminé</button>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
