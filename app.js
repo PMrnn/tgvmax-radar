@@ -50,7 +50,9 @@ async function getStationsCatalog(){
       }
     }
   }catch(e){}
-  const list = await fetchJSON("data/stations.json");
+  // ?v= busts both the browser's HTTP cache and the service worker's cache for this
+  // specific file — bump it whenever data/stations.json content changes.
+  const list = await fetchJSON("data/stations.json?v=2");
   stationsCatalog = list;
   stationsByIata = new Map(list.map(s=>[s.iata, s]));
   try{ localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(), stations:list})); }catch(e){}
