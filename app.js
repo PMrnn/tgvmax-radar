@@ -36,9 +36,13 @@ async function fetchJSON(url){
 // ---- Station catalog (one row per physical station, city-grouped, with coordinates) ----
 let stationsCatalog = null;
 let stationsByIata = null;
+// Single source of truth for cache-busting: bump this whenever data/stations.json's
+// CONTENT changes. It drives both the localStorage cache key and the fetch URL's query
+// param, so there's only one place to touch (no risk of the two invalidating separately).
+const STATIONS_DATA_VERSION = "3";
 async function getStationsCatalog(){
   if (stationsCatalog) return stationsCatalog;
-  const cacheKey = "tgvmax_stations_catalog_v2"; // bumped: v2 has full geo coverage (317/317)
+  const cacheKey = `tgvmax_stations_catalog_v${STATIONS_DATA_VERSION}`;
   try{
     const raw = localStorage.getItem(cacheKey);
     if (raw){
@@ -50,9 +54,8 @@ async function getStationsCatalog(){
       }
     }
   }catch(e){}
-  // ?v= busts both the browser's HTTP cache and the service worker's cache for this
-  // specific file — bump it whenever data/stations.json content changes.
-  const list = await fetchJSON("data/stations.json?v=2");
+  // ?v= busts both the browser's HTTP cache and the service worker's cache for this file.
+  const list = await fetchJSON(`data/stations.json?v=${STATIONS_DATA_VERSION}`);
   stationsCatalog = list;
   stationsByIata = new Map(list.map(s=>[s.iata, s]));
   try{ localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(), stations:list})); }catch(e){}
