@@ -38,7 +38,7 @@ let stationsCatalog = null;
 let stationsByIata = null;
 async function getStationsCatalog(){
   if (stationsCatalog) return stationsCatalog;
-  const cacheKey = "tgvmax_stations_catalog_v1";
+  const cacheKey = "tgvmax_stations_catalog_v2"; // bumped: v2 has full geo coverage (317/317)
   try{
     const raw = localStorage.getItem(cacheKey);
     if (raw){

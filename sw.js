@@ -1,7 +1,7 @@
 // TGVmax Radar — service worker: caches the app shell only.
 // Live SNCF API calls always go straight to the network (never cached),
 // so train data is never served stale.
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `tgvmax-radar-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
