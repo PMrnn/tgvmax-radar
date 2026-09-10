@@ -330,7 +330,14 @@ function createPicker(rootId){
   }
 
   input.addEventListener("input", renderDropdown);
-  input.addEventListener("focus", renderDropdown);
+  // Refocusing this field means "I want to change this station" — start from a clean
+  // slate rather than silently keeping a prior, now out-of-view selection.
+  input.addEventListener("focus", ()=>{
+    selected.clear();
+    renderChips();
+    renderDropdown();
+    input.select();
+  });
   document.addEventListener("click", (e)=>{ if (!root.contains(e.target)) dropdown.hidden = true; });
 
   return {
@@ -480,6 +487,14 @@ getStationsCatalog().then(()=>{
   pickers.cOrigin = createPicker("c-origin-picker");
   pickers.cDest = createPicker("c-dest-picker");
 }).catch(e=>console.warn("Impossible de charger le catalogue des gares :", e));
+
+document.getElementById("c-swap-btn").onclick = ()=>{
+  if (!pickers.cOrigin || !pickers.cDest) return; // catalog/pickers not ready yet
+  const originIatas = pickers.cOrigin.getSelected();
+  const destIatas = pickers.cDest.getSelected();
+  pickers.cOrigin.setSelected(destIatas);
+  pickers.cDest.setSelected(originIatas);
+};
 
 // ---- Feature 1: direct free trains from a departure town ----
 document.getElementById("d-search").onclick = async ()=>{

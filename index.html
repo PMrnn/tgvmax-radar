@@ -51,6 +51,9 @@
   .btn:disabled{opacity:.5;cursor:default;}
   .btn-alert{background:var(--panel);border:1px solid var(--accent);color:var(--accent);}
   .btn-alert:hover{background:var(--accent);color:#fff;}
+  .btn-swap{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--accent);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s;}
+  .btn-swap:hover{border-color:var(--accent);background:var(--chip);}
+  .btn-swap:active{transform:rotate(180deg);}
   .btn-sm{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11.5px;font-weight:600;padding:4px 9px;cursor:pointer;}
   .btn-sm:hover{border-color:var(--accent);color:var(--accent);}
   .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;}
@@ -207,7 +210,7 @@
       <button type="button" class="btn-sm" id="plan-open">Modifier</button>
     </div>
 
-    <div class="row">
+    <div class="row" style="align-items:flex-start;">
       <div class="field station-picker" id="c-origin-picker">
         <label>Départ</label>
         <div class="picker-input-wrap">
@@ -215,6 +218,9 @@
           <div class="picker-dropdown" hidden></div>
         </div>
         <div class="picker-chips"></div>
+      </div>
+      <div style="flex:0 0 auto;align-self:center;margin-top:20px;">
+        <button type="button" class="btn-swap" id="c-swap-btn" title="Inverser départ et arrivée" aria-label="Inverser départ et arrivée">⇄</button>
       </div>
       <div class="field station-picker" id="c-dest-picker">
         <label>Arrivée</label>
