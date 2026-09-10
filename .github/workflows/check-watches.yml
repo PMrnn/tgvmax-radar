@@ -1,0 +1,33 @@
+name: Check TGVmax alerts
+
+on:
+  schedule:
+    # Hourly. SNCF's dataset itself only refreshes ~once/day, but the OUI/NON
+    # flag can still shift intra-day as other travelers book/cancel against
+    # the shared TGVmax quota, so hourly can catch genuinely new openings.
+    - cron: "0 * * * *"
+  workflow_dispatch: {} # allows manually triggering a run from the Actions tab, for testing
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run check-watches
+        env:
+          WORKER_URL: ${{ secrets.TGVMAX_WORKER_URL }}
+          ADMIN_SECRET: ${{ secrets.TGVMAX_ADMIN_SECRET }}
+          VAPID_PUBLIC_KEY: ${{ secrets.TGVMAX_VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.TGVMAX_VAPID_PRIVATE_KEY }}

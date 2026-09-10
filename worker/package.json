@@ -1,0 +1,23 @@
+{
+  "name": "tgvmax-radar-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker (watches API) + GitHub Actions checker script for TGVmax Radar alerts",
+  "main": "src/index.js",
+  "scripts": {
+    "check-watches": "node scripts/check-watches.mjs",
+    "deploy": "wrangler deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "web-push": "^3.6.7",
+    "wrangler": "^4.129.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "wrangler@4.129.0": true,
+    "workerd@1.20260903.1": true
+  }
+}

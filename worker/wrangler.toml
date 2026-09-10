@@ -1,0 +1,7 @@
+name = "tgvmax-radar-worker"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "WATCHES"
+id = "03c702c1433f4a8198e581d150e0edbf"

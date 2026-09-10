@@ -64,6 +64,14 @@
   .btn{padding:11px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;}
   .btn:hover{background:var(--accent2);}
   .btn:disabled{opacity:.5;cursor:default;}
+  .btn-alert{background:var(--panel);border:1px solid var(--accent);color:var(--accent);}
+  .btn-alert:hover{background:var(--accent);color:#fff;}
+  .watch-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg);}
+  .watch-card .watch-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .watch-card .watch-label{font-weight:700;font-size:14px;}
+  .watch-card .watch-meta{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5;}
+  .watch-card .btn-del{background:none;border:1px solid var(--border);border-radius:8px;color:var(--accent2);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex:0 0 auto;}
+  .watch-card .btn-del:hover{border-color:var(--accent2);}
   .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;}
   .err{color:var(--accent2);font-weight:600;}
   table{width:100%;border-collapse:collapse;font-size:13.5px;}
@@ -98,6 +106,7 @@
   <nav class="tabs">
     <button id="tab-direct" class="active">Trajets libres depuis une gare</button>
     <button id="tab-connect">Trajet A → B (jusqu'à 3 trains)</button>
+    <button id="tab-alerts">🔔 Mes alertes</button>
   </nav>
 
   <!-- FEATURE 1 -->
@@ -113,6 +122,9 @@
       </div>
       <div class="field" style="flex:0 0 auto;align-self:flex-end;">
         <button class="btn" id="d-search">Chercher</button>
+      </div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end;">
+        <button class="btn btn-alert" id="d-alert-btn" type="button">🔔 Créer une alerte</button>
       </div>
     </div>
     <details class="adv">
@@ -157,6 +169,9 @@
       </div>
       <div class="field" style="flex:0 0 auto;align-self:flex-end;">
         <button class="btn" id="c-search">Chercher</button>
+      </div>
+      <div class="field" style="flex:0 0 auto;align-self:flex-end;">
+        <button class="btn btn-alert" id="c-alert-btn" type="button">🔔 Créer une alerte</button>
       </div>
     </div>
     <label class="check-row">
@@ -210,6 +225,17 @@
     <div id="c-results"></div>
   </section>
 
+  <!-- ALERTS -->
+  <section id="panel-alerts" class="panel" hidden>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px;">
+      Vos alertes sont vérifiées automatiquement (environ toutes les heures). Vous recevrez une notification
+      dès qu'un nouveau trajet 100% TGVmax correspond à vos critères — même l'application fermée.
+      Créez une alerte depuis les onglets de recherche avec le bouton « 🔔 Créer une alerte ».
+    </p>
+    <div class="status" id="alerts-status"></div>
+    <div id="alerts-list"></div>
+  </section>
+
   <datalist id="stations-list"></datalist>
 </main>
 <footer>
@@ -221,6 +247,62 @@
 const API_URL = "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/records";
 const PAGE_SIZE = 100;
 const MAX_PAGES_SAFETY = 60; // hard safety cap (~6000 rows) per day fetch
+
+// ---- Alerts backend (Cloudflare Worker: stores watches + push subscriptions) ----
+const WORKER_URL = "https://tgvmax-radar-worker.tgvmax-radar-pmrnn.workers.dev";
+const VAPID_PUBLIC_KEY = "BOzXYeh9JHB2mVWQ43SqFmN6etvxeyp_c-FSHQzoDnjl8xXyU4Tk9gxXpzbVLA-nbhfW_boSf8H6RMdfXLnFM9o";
+
+function getDeviceId(){
+  let id = localStorage.getItem("tgvmax_device_id");
+  if (!id){
+    id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    localStorage.setItem("tgvmax_device_id", id);
+  }
+  return id;
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding = "=".repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+// Requests Notification permission (if needed) and returns an active PushSubscription (JSON-serializable).
+async function ensurePushSubscription(){
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)){
+    throw new Error("Les notifications push ne sont pas supportées par ce navigateur.");
+  }
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub){
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted"){
+      throw new Error("Permission de notification refusée. Autorisez les notifications pour créer une alerte.");
+    }
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  return sub.toJSON();
+}
+
+async function createWatch(criteria, label){
+  const subscription = await ensurePushSubscription();
+  const r = await fetch(`${WORKER_URL}/watches`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ deviceId: getDeviceId(), subscription, criteria, label }),
+  });
+  if (!r.ok){
+    const body = await r.text().catch(()=> "");
+    throw new Error(`Erreur serveur alertes (${r.status}) : ${body.slice(0,200)}`);
+  }
+  return r.json();
+}
 
 const PARIS_EXTRA_STATIONS = [
   "AEROPORT ROISSY CDG 2 TGV",
@@ -397,10 +479,19 @@ document.querySelectorAll(".btn-add-window").forEach(btn=>{
 // ---- Tabs ----
 const tabDirect = document.getElementById("tab-direct");
 const tabConnect = document.getElementById("tab-connect");
+const tabAlerts = document.getElementById("tab-alerts");
 const panelDirect = document.getElementById("panel-direct");
 const panelConnect = document.getElementById("panel-connect");
-tabDirect.onclick = ()=>{ tabDirect.classList.add("active"); tabConnect.classList.remove("active"); panelDirect.hidden=false; panelConnect.hidden=true; };
-tabConnect.onclick = ()=>{ tabConnect.classList.add("active"); tabDirect.classList.remove("active"); panelConnect.hidden=false; panelDirect.hidden=true; };
+const panelAlerts = document.getElementById("panel-alerts");
+const allTabs = [tabDirect, tabConnect, tabAlerts];
+const allPanels = [panelDirect, panelConnect, panelAlerts];
+function activateTab(tab, panel){
+  allTabs.forEach(t=>t.classList.toggle("active", t===tab));
+  allPanels.forEach(p=>p.hidden = (p!==panel));
+}
+tabDirect.onclick = ()=> activateTab(tabDirect, panelDirect);
+tabConnect.onclick = ()=> activateTab(tabConnect, panelConnect);
+tabAlerts.onclick = ()=>{ activateTab(tabAlerts, panelAlerts); loadAlerts(); };
 
 // ---- Init dates + autocomplete ----
 const today = new Date().toISOString().slice(0,10);
@@ -475,6 +566,28 @@ document.getElementById("d-search").onclick = async ()=>{
     }
     html += "</tbody></table>";
     resultsEl.innerHTML = html;
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
+  }
+};
+
+document.getElementById("d-alert-btn").onclick = async ()=>{
+  const originInput = document.getElementById("d-origin").value.trim();
+  const date = document.getElementById("d-date").value;
+  const depWindows = getWindows("d-dep-windows");
+  const arrWindows = getWindows("d-arr-windows");
+  const statusEl = document.getElementById("d-status");
+  if (!originInput || !date){
+    statusEl.innerHTML = '<span class="err">Merci de renseigner une ville de départ et une date avant de créer une alerte.</span>';
+    return;
+  }
+  const criteria = { type: "direct", origin: originInput, date, depWindows, arrWindows };
+  const label = `Départ ${originInput} — ${date}`;
+  statusEl.innerHTML = '<span class="spinner"></span>Création de l’alerte…';
+  try{
+    await createWatch(criteria, label);
+    statusEl.innerHTML = `<span class="pill">🔔 Alerte créée</span> — consultez l’onglet « Mes alertes ».`;
   }catch(e){
     console.error(e);
     statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
@@ -618,6 +731,49 @@ document.getElementById("c-search").onclick = async ()=>{
   }
 };
 
+document.getElementById("c-alert-btn").onclick = async ()=>{
+  const originInput = document.getElementById("c-origin").value.trim();
+  const destInput = document.getElementById("c-dest").value.trim();
+  const dateMin = document.getElementById("c-date-min").value;
+  const dateMax = document.getElementById("c-date-max").value;
+  const returnEnabled = document.getElementById("c-return-toggle").checked;
+  const retDateMin = document.getElementById("c-ret-date-min").value;
+  const retDateMax = document.getElementById("c-ret-date-max").value;
+  const minSame = Number(document.getElementById("c-min-same").value)||0;
+  const minCity = Number(document.getElementById("c-min-city").value)||0;
+  const maxConn = Number(document.getElementById("c-max").value)||180;
+  const minStay = Number(document.getElementById("c-min-stay").value)||0;
+  const depWindows = getWindows("c-dep-windows");
+  const arrWindows = getWindows("c-arr-windows");
+  const statusEl = document.getElementById("c-status");
+
+  if (!originInput || !destInput || !dateMin || !dateMax){
+    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une plage de dates avant de créer une alerte.</span>';
+    return;
+  }
+  if (returnEnabled && (!retDateMin || !retDateMax)){
+    statusEl.innerHTML = '<span class="err">Merci de renseigner une plage de dates retour avant de créer une alerte.</span>';
+    return;
+  }
+
+  const criteria = {
+    type: "connections", origin: originInput, dest: destInput, dateMin, dateMax,
+    returnEnabled, retDateMin, retDateMax, minSame, minCity, maxConn, minStay,
+    depWindows, arrWindows,
+  };
+  let label = `${originInput} → ${destInput} (${dateMin}${dateMin!==dateMax?" au "+dateMax:""})`;
+  if (returnEnabled) label += ` + retour (${retDateMin}${retDateMin!==retDateMax?" au "+retDateMax:""})`;
+
+  statusEl.innerHTML = '<span class="spinner"></span>Création de l’alerte…';
+  try{
+    await createWatch(criteria, label);
+    statusEl.innerHTML = `<span class="pill">🔔 Alerte créée</span> — consultez l’onglet « Mes alertes ».`;
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
+  }
+};
+
 function findItineraries(trains, originSet, destSet, opts){
   const {minSame, minCity, maxConn} = opts;
 
@@ -725,6 +881,67 @@ function renderItinerary(it, opts){
 
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// ---- Alerts list (tab 3): fetch/render/delete watches saved on the Worker ----
+function formatWindowsSummary(windows){
+  if (!windows || windows.length===0) return "toute heure";
+  return windows.map(w => `${w.from||"00:00"}–${w.to||"24:00"}`).join(" ou ");
+}
+function formatCriteriaSummary(c){
+  if (c.type === "direct"){
+    return `Départ le ${c.date} · départ ${formatWindowsSummary(c.depWindows)} · arrivée ${formatWindowsSummary(c.arrWindows)}`;
+  }
+  let s = c.dateMin===c.dateMax ? `Aller le ${c.dateMin}` : `Aller entre le ${c.dateMin} et le ${c.dateMax}`;
+  if (c.returnEnabled) s += c.retDateMin===c.retDateMax ? ` · retour le ${c.retDateMin}` : ` · retour entre le ${c.retDateMin} et le ${c.retDateMax}`;
+  s += ` · départ ${formatWindowsSummary(c.depWindows)} · arrivée ${formatWindowsSummary(c.arrWindows)}`;
+  return s;
+}
+
+async function loadAlerts(){
+  const statusEl = document.getElementById("alerts-status");
+  const listEl = document.getElementById("alerts-list");
+  statusEl.innerHTML = '<span class="spinner"></span>Chargement…';
+  try{
+    const r = await fetch(`${WORKER_URL}/watches?deviceId=${encodeURIComponent(getDeviceId())}`);
+    if (!r.ok) throw new Error(`Erreur serveur (${r.status})`);
+    const { watches } = await r.json();
+    statusEl.textContent = `${watches.length} alerte(s) active(s) sur cet appareil.`;
+    if (watches.length === 0){
+      listEl.innerHTML = '<div class="empty">Aucune alerte pour l’instant. Créez-en une depuis les onglets de recherche.</div>';
+      return;
+    }
+    watches.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
+    listEl.innerHTML = watches.map(w => `
+      <div class="watch-card">
+        <div class="watch-head">
+          <div>
+            <div class="watch-label">${escapeHtml(w.label || `${w.criteria.origin} → ${w.criteria.dest||""}`)}</div>
+            <div class="watch-meta">${escapeHtml(formatCriteriaSummary(w.criteria))}</div>
+            <div class="watch-meta">${w.lastCheckedAt ? "Dernière vérification : "+new Date(w.lastCheckedAt).toLocaleString("fr-FR") : "Pas encore vérifiée"}${w.lastError ? " · ⚠️ "+escapeHtml(w.lastError) : ""}</div>
+          </div>
+          <button class="btn-del" data-del="${w.id}">Supprimer</button>
+        </div>
+      </div>`).join("");
+    listEl.querySelectorAll("[data-del]").forEach(btn=>{
+      btn.onclick = ()=> deleteWatch(btn.dataset.del);
+    });
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
+  }
+}
+
+async function deleteWatch(id){
+  const statusEl = document.getElementById("alerts-status");
+  try{
+    const r = await fetch(`${WORKER_URL}/watches/${encodeURIComponent(id)}?deviceId=${encodeURIComponent(getDeviceId())}`, { method: "DELETE" });
+    if (!r.ok) throw new Error(`Erreur serveur (${r.status})`);
+    await loadAlerts();
+  }catch(e){
+    console.error(e);
+    statusEl.innerHTML = `<span class="err">Erreur lors de la suppression : ${escapeHtml(e.message||String(e))}</span>`;
+  }
 }
 
 // ---- PWA: register service worker (app-shell offline cache; API calls always live) ----

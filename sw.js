@@ -1,7 +1,7 @@
 // TGVmax Radar — service worker: caches the app shell only.
 // Live SNCF API calls always go straight to the network (never cached),
 // so train data is never served stale.
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `tgvmax-radar-${CACHE_VERSION}`;
 const APP_SHELL = [
   "./",
@@ -45,5 +45,33 @@ self.addEventListener("fetch", (event) => {
         return resp;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
+  );
+});
+
+// ---- Alerts: show a real notification when the daily/hourly checker pushes one ----
+self.addEventListener("push", (event) => {
+  let payload = { title: "TGVmax Radar", body: "Un nouveau trajet correspond à une de vos alertes." };
+  try { if (event.data) payload = { ...payload, ...event.data.json() }; } catch (e) {}
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "./icons/icon-192.png",
+      badge: "./icons/icon-192.png",
+      data: { url: payload.url || "./" },
+      tag: payload.tag || undefined,
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "./";
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.includes(self.registration.scope) && "focus" in client) return client.focus();
+      }
+      return clients.openWindow(url);
+    })
   );
 });
