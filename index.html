@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="TGVmax Radar">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root{
     --bg:#f5f6f8; --panel:#ffffff; --text:#1a1d24; --muted:#6b7280;
@@ -39,45 +40,27 @@
   .row{display:flex;gap:12px;flex-wrap:wrap;}
   .field{flex:1;min-width:160px;display:flex;flex-direction:column;gap:6px;margin-bottom:12px;}
   label{font-size:12.5px;color:var(--muted);font-weight:600;}
-  input[type=text],input[type=date],input[type=number]{
+  input[type=text],input[type=date],input[type=number],input[type=time]{
     padding:10px 12px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14.5px;outline:none;
   }
   input:focus{border-color:var(--accent);}
   details.adv{margin:4px 0 10px;}
   details.adv summary{cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600;padding:4px 0;}
-  .check-row{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:2px 0 14px;cursor:pointer;}
-  .check-row input{width:16px;height:16px;accent-color:var(--accent);}
-  .windows-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
-  .window-row{display:flex;align-items:center;gap:6px;}
-  .window-row input[type=time]{flex:1;min-width:0;}
-  .window-row span{color:var(--muted);font-size:12.5px;}
-  .win-remove{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);width:30px;height:30px;flex:0 0 auto;cursor:pointer;font-size:13px;}
-  .win-remove:hover{color:var(--accent2);border-color:var(--accent2);}
-  .btn-add-window{background:none;border:1px dashed var(--border);border-radius:9px;color:var(--accent);font-size:12.5px;font-weight:600;padding:7px 12px;cursor:pointer;align-self:flex-start;}
-  .btn-add-window:hover{border-color:var(--accent);}
-  .date-badge{display:inline-block;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:20px;margin-bottom:6px;}
-  .return-block{margin-top:10px;padding:10px 0 0;border-top:1px dashed var(--border);}
-  .return-block .return-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
-  .itin.compact{padding:9px 12px;margin-bottom:8px;background:var(--panel);}
-  .itin.compact .leg{font-size:12.5px;padding:2px 0;}
-  .more-note{font-size:11.5px;color:var(--muted);padding:2px 2px 0;}
   .btn{padding:11px 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;}
   .btn:hover{background:var(--accent2);}
   .btn:disabled{opacity:.5;cursor:default;}
   .btn-alert{background:var(--panel);border:1px solid var(--accent);color:var(--accent);}
   .btn-alert:hover{background:var(--accent);color:#fff;}
-  .watch-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg);}
-  .watch-card .watch-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
-  .watch-card .watch-label{font-weight:700;font-size:14px;}
-  .watch-card .watch-meta{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5;}
-  .watch-card .btn-del{background:none;border:1px solid var(--border);border-radius:8px;color:var(--accent2);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex:0 0 auto;}
-  .watch-card .btn-del:hover{border-color:var(--accent2);}
+  .btn-sm{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11.5px;font-weight:600;padding:4px 9px;cursor:pointer;}
+  .btn-sm:hover{border-color:var(--accent);color:var(--accent);}
   .status{font-size:13px;color:var(--muted);margin-top:10px;min-height:18px;}
   .err{color:var(--accent2);font-weight:600;}
   table{width:100%;border-collapse:collapse;font-size:13.5px;}
   th{text-align:left;color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:8px 10px;border-bottom:1px solid var(--border);}
   td{padding:9px 10px;border-bottom:1px solid var(--border);}
   tr:last-child td{border-bottom:none;}
+  tr.train-row{cursor:pointer;}
+  tr.train-row:hover td{background:var(--chip);}
   .pill{display:inline-block;background:var(--ok-bg);color:var(--ok);font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
   .section-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:22px 0 8px;}
   .itin{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg);}
@@ -95,6 +78,62 @@
   .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-2px;margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
   [hidden]{display:none!important;}
+  .check-row{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;margin:2px 0 14px;cursor:pointer;}
+  .check-row input{width:16px;height:16px;accent-color:var(--accent);}
+  .windows-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px;}
+  .window-row{display:flex;align-items:center;gap:6px;}
+  .window-row input[type=time]{flex:1;min-width:0;}
+  .window-row span{color:var(--muted);font-size:12.5px;}
+  .win-remove{background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);width:30px;height:30px;flex:0 0 auto;cursor:pointer;font-size:13px;}
+  .win-remove:hover{color:var(--accent2);border-color:var(--accent2);}
+  .btn-add-window{background:none;border:1px dashed var(--border);border-radius:9px;color:var(--accent);font-size:12.5px;font-weight:600;padding:7px 12px;cursor:pointer;align-self:flex-start;}
+  .btn-add-window:hover{border-color:var(--accent);}
+  .date-badge{display:inline-block;font-size:11.5px;font-weight:700;color:var(--muted);background:var(--chip);padding:2px 8px;border-radius:20px;margin-bottom:6px;}
+  .return-block{margin-top:10px;padding:10px 0 0;border-top:1px dashed var(--border);}
+  .return-block .return-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;}
+  .itin.compact{padding:9px 12px;margin-bottom:8px;background:var(--panel);}
+  .itin.compact .leg{font-size:12.5px;padding:2px 0;}
+  .more-note{font-size:11.5px;color:var(--muted);padding:2px 2px 0;}
+  .watch-card{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:var(--bg);}
+  .watch-card .watch-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .watch-card .watch-label{font-weight:700;font-size:14px;}
+  .watch-card .watch-meta{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5;}
+  .watch-card .btn-del{background:none;border:1px solid var(--border);border-radius:8px;color:var(--accent2);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;flex:0 0 auto;}
+  .watch-card .btn-del:hover{border-color:var(--accent2);}
+
+  /* Station picker (city-grouped, click-to-select) */
+  .station-picker{position:relative;}
+  .picker-input-wrap{position:relative;}
+  .picker-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .picker-chips .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border-radius:20px;padding:4px 6px 4px 10px;font-size:12.5px;}
+  .picker-chips .chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;width:18px;height:18px;border-radius:50%;}
+  .picker-chips .chip button:hover{background:var(--border);color:var(--accent2);}
+  .picker-dropdown{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;max-height:320px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:6px;}
+  .picker-empty{color:var(--muted);font-size:13px;padding:10px;}
+  .picker-group{margin-bottom:4px;}
+  .picker-group-head{display:flex;justify-content:space-between;align-items:center;padding:6px 8px 4px;}
+  .picker-group-head span{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;}
+  .picker-checkall{background:none;border:none;color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:2px 4px;}
+  .picker-row{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:6px 8px;border-radius:7px;cursor:pointer;}
+  .picker-row:hover{background:var(--chip);}
+  .picker-row input{width:16px;height:16px;accent-color:var(--accent);flex:0 0 auto;}
+  .picker-row .picker-row-map{margin-left:auto;font-size:11px;color:var(--muted);}
+
+  /* Weekly planning */
+  .plan-grid{display:flex;flex-direction:column;gap:10px;}
+  .plan-day{border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .plan-day-head{font-weight:700;font-size:13.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+  .plan-day-head .weekend-tag{font-size:10.5px;font-weight:600;color:var(--ok);background:var(--ok-bg);padding:1px 7px;border-radius:20px;}
+  .plan-cols{display:flex;gap:16px;flex-wrap:wrap;}
+  .plan-col{flex:1;min-width:200px;}
+  .plan-col-label{font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:6px;}
+  .plan-combine{display:flex;align-items:center;gap:10px;font-size:13px;margin:8px 0 14px;padding:10px 12px;background:var(--chip);border-radius:10px;}
+  .plan-combine select{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);}
+
+  /* Map */
+  .map-row td{padding:0;}
+  .map-box{height:260px;border-radius:0 0 10px 10px;overflow:hidden;}
+  .map-unavailable{padding:16px;color:var(--muted);font-size:13px;text-align:center;}
 </style>
 </head>
 <body>
@@ -112,9 +151,13 @@
   <!-- FEATURE 1 -->
   <section id="panel-direct" class="panel">
     <div class="row">
-      <div class="field">
+      <div class="field station-picker" id="d-origin-picker">
         <label>Ville / gare de départ</label>
-        <input type="text" id="d-origin" list="stations-list" placeholder="Paris, Lyon, Bordeaux…">
+        <div class="picker-input-wrap">
+          <input type="text" class="picker-input" placeholder="Tapez pour chercher : Paris, Lyon, Bordeaux…" autocomplete="off">
+          <div class="picker-dropdown" hidden></div>
+        </div>
+        <div class="picker-chips"></div>
       </div>
       <div class="field" style="max-width:180px;">
         <label>Date</label>
@@ -148,14 +191,41 @@
 
   <!-- FEATURE 2 -->
   <section id="panel-connect" class="panel" hidden>
-    <div class="row">
-      <div class="field">
-        <label>Départ</label>
-        <input type="text" id="c-origin" list="stations-list" placeholder="Paris">
+    <div class="panel" style="box-shadow:none;background:var(--bg);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div>
+          <div style="font-weight:700;font-size:14.5px;">📅 Vos disponibilités</div>
+          <div style="color:var(--muted);font-size:12px;margin-top:2px;">Par défaut : week-end libre toute la journée, semaine = arrivée avant 9h ou départ après 18h (horaires de bureau). Modifiable ci-dessous, mémorisé pour la prochaine fois.</div>
+        </div>
+        <button type="button" class="btn-sm" id="plan-reset">Réinitialiser les valeurs par défaut</button>
       </div>
-      <div class="field">
+      <div class="plan-combine">
+        Un trajet est accepté si
+        <select id="plan-combine-mode">
+          <option value="OR">départ OK OU arrivée OK</option>
+          <option value="AND">départ OK ET arrivée OK</option>
+        </select>
+        (par rapport aux fenêtres du jour concerné)
+      </div>
+      <div class="plan-grid" id="plan-grid"></div>
+    </div>
+
+    <div class="row">
+      <div class="field station-picker" id="c-origin-picker">
+        <label>Départ</label>
+        <div class="picker-input-wrap">
+          <input type="text" class="picker-input" placeholder="Paris" autocomplete="off">
+          <div class="picker-dropdown" hidden></div>
+        </div>
+        <div class="picker-chips"></div>
+      </div>
+      <div class="field station-picker" id="c-dest-picker">
         <label>Arrivée</label>
-        <input type="text" id="c-dest" list="stations-list" placeholder="Marseille">
+        <div class="picker-input-wrap">
+          <input type="text" class="picker-input" placeholder="Marseille" autocomplete="off">
+          <div class="picker-dropdown" hidden></div>
+        </div>
+        <div class="picker-chips"></div>
       </div>
     </div>
     <div class="row">
@@ -208,18 +278,6 @@
           <input type="number" id="c-min-stay" value="60" min="0" max="10080">
         </div>
       </div>
-      <div class="row" style="margin-top:2px;">
-        <div class="field" style="flex:1 1 260px;">
-          <label>Fenêtres de départ acceptées <span style="font-weight:400;">(aller et retour ; vide = toute heure ; plusieurs = « ou »)</span></label>
-          <div class="windows-list" id="c-dep-windows"></div>
-          <button type="button" class="btn-add-window" data-target="c-dep-windows">+ Ajouter une fenêtre</button>
-        </div>
-        <div class="field" style="flex:1 1 260px;">
-          <label>Fenêtres d'arrivée acceptées <span style="font-weight:400;">(aller et retour ; vide = toute heure ; plusieurs = « ou »)</span></label>
-          <div class="windows-list" id="c-arr-windows"></div>
-          <button type="button" class="btn-add-window" data-target="c-arr-windows">+ Ajouter une fenêtre</button>
-        </div>
-      </div>
     </details>
     <div class="status" id="c-status"></div>
     <div id="c-results"></div>
@@ -235,721 +293,14 @@
     <div class="status" id="alerts-status"></div>
     <div id="alerts-list"></div>
   </section>
-
-  <datalist id="stations-list"></datalist>
 </main>
 <footer>
-  Données : <a href="https://ressources.data.sncf.com/explore/dataset/tgvmax/" target="_blank" rel="noopener">jeu de données « Disponibilité MAX JEUNE / MAX SENIOR » — SNCF Open Data</a>,
+  Données : <a href="https://ressources.data.sncf.com/explore/dataset/tgvmax/" target="_blank" rel="noopener">jeu de données « Disponibilité MAX JEUNE / MAX SENIOR » — SNCF Open Data</a>
+  et <a href="https://ressources.data.sncf.com/explore/dataset/gares-de-voyageurs/" target="_blank" rel="noopener">« Gares de voyageurs »</a> (géolocalisation, pour la carte),
   mis à jour environ une fois par jour, fenêtre glissante de 30 jours. Application non affiliée à la SNCF — vérifiez toujours la disponibilité réelle avant réservation.
 </footer>
 
-<script>
-const API_URL = "https://ressources.data.sncf.com/api/explore/v2.1/catalog/datasets/tgvmax/records";
-const PAGE_SIZE = 100;
-const MAX_PAGES_SAFETY = 60; // hard safety cap (~6000 rows) per day fetch
-
-// ---- Alerts backend (Cloudflare Worker: stores watches + push subscriptions) ----
-const WORKER_URL = "https://tgvmax-radar-worker.tgvmax-radar-pmrnn.workers.dev";
-const VAPID_PUBLIC_KEY = "BOzXYeh9JHB2mVWQ43SqFmN6etvxeyp_c-FSHQzoDnjl8xXyU4Tk9gxXpzbVLA-nbhfW_boSf8H6RMdfXLnFM9o";
-
-function getDeviceId(){
-  let id = localStorage.getItem("tgvmax_device_id");
-  if (!id){
-    id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    localStorage.setItem("tgvmax_device_id", id);
-  }
-  return id;
-}
-
-function urlBase64ToUint8Array(base64String){
-  const padding = "=".repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  const out = new Uint8Array(raw.length);
-  for (let i=0;i<raw.length;i++) out[i] = raw.charCodeAt(i);
-  return out;
-}
-
-// Requests Notification permission (if needed) and returns an active PushSubscription (JSON-serializable).
-async function ensurePushSubscription(){
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)){
-    throw new Error("Les notifications push ne sont pas supportées par ce navigateur.");
-  }
-  const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub){
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted"){
-      throw new Error("Permission de notification refusée. Autorisez les notifications pour créer une alerte.");
-    }
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-    });
-  }
-  return sub.toJSON();
-}
-
-async function createWatch(criteria, label){
-  const subscription = await ensurePushSubscription();
-  const r = await fetch(`${WORKER_URL}/watches`, {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ deviceId: getDeviceId(), subscription, criteria, label }),
-  });
-  if (!r.ok){
-    const body = await r.text().catch(()=> "");
-    throw new Error(`Erreur serveur alertes (${r.status}) : ${body.slice(0,200)}`);
-  }
-  return r.json();
-}
-
-const PARIS_EXTRA_STATIONS = [
-  "AEROPORT ROISSY CDG 2 TGV",
-  "MARNE LA VALLEE CHESSY",
-  "MASSY PALAISEAU",
-  "MASSY TGV"
-];
-const PARIS_ALIASES = new Set([
-  "paris","montparnasse","austerlitz","nord","est","bercy",
-  "cdg","roissy","massy","marne la vallee","disneyland","disney"
-]);
-
-function normalize(s){
-  return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
-}
-
-function buildUrl(params){
-  const usp = new URLSearchParams();
-  for (const [k,v] of Object.entries(params)){
-    if (Array.isArray(v)) v.forEach(x=>usp.append(k,x));
-    else usp.append(k, v);
-  }
-  return API_URL + "?" + usp.toString();
-}
-
-async function fetchJSON(url){
-  const r = await fetch(url);
-  if (!r.ok){
-    let body = "";
-    try{ body = await r.text(); }catch(e){}
-    throw new Error(`Erreur API SNCF (${r.status}) : ${body.slice(0,200)}`);
-  }
-  return r.json();
-}
-
-// ---- Station list (for autocomplete + Paris grouping) ----
-let stationsCache = null;
-async function getAllStations(){
-  if (stationsCache) return stationsCache;
-  const cacheKey = "tgvmax_stations_v1";
-  try{
-    const raw = localStorage.getItem(cacheKey);
-    if (raw){
-      const obj = JSON.parse(raw);
-      if (Date.now() - obj.ts < 24*3600*1000){
-        stationsCache = obj.stations;
-        return stationsCache;
-      }
-    }
-  }catch(e){}
-
-  const set = new Set();
-  let offset = 0;
-  while (true){
-    const url = buildUrl({limit:PAGE_SIZE, offset, select:"origine", group_by:"origine"});
-    const data = await fetchJSON(url);
-    data.results.forEach(r=>set.add(r.origine));
-    if (data.results.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-  const arr = Array.from(set).sort();
-  stationsCache = arr;
-  try{ localStorage.setItem(cacheKey, JSON.stringify({ts:Date.now(), stations:arr})); }catch(e){}
-  return arr;
-}
-
-function resolveStations(query, allStations){
-  const q = normalize(query);
-  if (q.length < 2) return [];
-  if (PARIS_ALIASES.has(q)){
-    return allStations.filter(s => normalize(s).includes("paris") || PARIS_EXTRA_STATIONS.includes(s));
-  }
-  return allStations.filter(s => normalize(s).includes(q));
-}
-
-// ---- Day trains (TGVmax available only) ----
-const dayCache = new Map();
-async function getDayTrains(date){
-  if (dayCache.has(date)) return dayCache.get(date);
-  const refine = [`date:${date}`, `od_happy_card:OUI`];
-  const first = await fetchJSON(buildUrl({limit:PAGE_SIZE, offset:0, refine}));
-  let results = first.results.slice();
-  const total = Math.min(first.total_count, PAGE_SIZE*MAX_PAGES_SAFETY);
-  const offsets = [];
-  for (let off = PAGE_SIZE; off < total; off += PAGE_SIZE) offsets.push(off);
-  const pages = await Promise.all(offsets.map(off => fetchJSON(buildUrl({limit:PAGE_SIZE, offset:off, refine}))));
-  pages.forEach(p => results = results.concat(p.results));
-
-  // precompute minutes-since-midnight, with overnight rollover on arrival
-  results.forEach(t=>{
-    t.departMin = hhmmToMin(t.heure_depart);
-    let a = hhmmToMin(t.heure_arrivee);
-    if (a < t.departMin) a += 1440;
-    t.arriveMin = a;
-  });
-
-  dayCache.set(date, results);
-  return results;
-}
-
-function hhmmToMin(hhmm){
-  const [h,m] = hhmm.split(":").map(Number);
-  return h*60+m;
-}
-function minToHHMM(min){
-  min = ((min % 1440) + 1440) % 1440;
-  const h = Math.floor(min/60), m = min%60;
-  return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");
-}
-function durationLabel(mins){
-  const h = Math.floor(mins/60), m = mins%60;
-  return h>0 ? `${h}h${String(m).padStart(2,"0")}` : `${m}min`;
-}
-
-const MAX_RANGE_DAYS = 15;
-function dateRangeList(minStr, maxStr){
-  const out = [];
-  let d = new Date(minStr+"T00:00:00Z");
-  const end = new Date(maxStr+"T00:00:00Z");
-  while (d <= end){
-    out.push(d.toISOString().slice(0,10));
-    d.setUTCDate(d.getUTCDate()+1);
-  }
-  return out;
-}
-function dayIndex(dateStr){
-  return Math.round(Date.parse(dateStr+"T00:00:00Z")/86400000);
-}
-function absoluteMinutes(dateStr, minutesInDay){
-  return dayIndex(dateStr)*1440 + minutesInDay;
-}
-function lowerBound(sortedArr, target){
-  let lo=0, hi=sortedArr.length;
-  while (lo<hi){ const mid=(lo+hi)>>1; if (sortedArr[mid] < target) lo=mid+1; else hi=mid; }
-  return lo;
-}
-const dateLabelFmt = new Intl.DateTimeFormat("fr-FR", {weekday:"short", day:"numeric", month:"short"});
-function formatDateLabel(dateStr){
-  const d = new Date(dateStr+"T00:00:00");
-  return dateLabelFmt.format(d).replace(".", "");
-}
-
-// hhmm is a plain "HH:MM" clock time (string compare works since always zero-padded).
-// windows is an array of {from, to} (each optional "HH:MM"); matches if it falls in ANY window (OR).
-// An empty windows array means "no constraint" (matches everything).
-function timeMatchesWindows(hhmm, windows){
-  if (!windows || windows.length === 0) return true;
-  return windows.some(w => (!w.from || hhmm >= w.from) && (!w.to || hhmm <= w.to));
-}
-
-// ---- Reusable "list of time windows" widget (add/remove rows, read back values) ----
-function addWindowRow(containerId, from, to){
-  const container = document.getElementById(containerId);
-  const row = document.createElement("div");
-  row.className = "window-row";
-  row.innerHTML = `<input type="time" class="win-from" value="${from||""}"><span>–</span><input type="time" class="win-to" value="${to||""}"><button type="button" class="win-remove" aria-label="Supprimer cette fenêtre">✕</button>`;
-  row.querySelector(".win-remove").onclick = ()=> row.remove();
-  container.appendChild(row);
-}
-function getWindows(containerId){
-  const wins = [];
-  document.getElementById(containerId).querySelectorAll(".window-row").forEach(row=>{
-    const from = row.querySelector(".win-from").value;
-    const to = row.querySelector(".win-to").value;
-    if (from || to) wins.push({from, to});
-  });
-  return wins;
-}
-document.querySelectorAll(".btn-add-window").forEach(btn=>{
-  btn.onclick = ()=> addWindowRow(btn.dataset.target);
-});
-["d-dep-windows","d-arr-windows","c-dep-windows","c-arr-windows"].forEach(id=>addWindowRow(id));
-
-// ---- Tabs ----
-const tabDirect = document.getElementById("tab-direct");
-const tabConnect = document.getElementById("tab-connect");
-const tabAlerts = document.getElementById("tab-alerts");
-const panelDirect = document.getElementById("panel-direct");
-const panelConnect = document.getElementById("panel-connect");
-const panelAlerts = document.getElementById("panel-alerts");
-const allTabs = [tabDirect, tabConnect, tabAlerts];
-const allPanels = [panelDirect, panelConnect, panelAlerts];
-function activateTab(tab, panel){
-  allTabs.forEach(t=>t.classList.toggle("active", t===tab));
-  allPanels.forEach(p=>p.hidden = (p!==panel));
-}
-tabDirect.onclick = ()=> activateTab(tabDirect, panelDirect);
-tabConnect.onclick = ()=> activateTab(tabConnect, panelConnect);
-tabAlerts.onclick = ()=>{ activateTab(tabAlerts, panelAlerts); loadAlerts(); };
-
-// ---- Init dates + autocomplete ----
-const today = new Date().toISOString().slice(0,10);
-document.getElementById("d-date").value = today;
-document.getElementById("d-date").min = today;
-["c-date-min","c-date-max","c-ret-date-min","c-ret-date-max"].forEach(id=>{
-  const el = document.getElementById(id);
-  el.value = today;
-  el.min = today;
-});
-
-const returnToggle = document.getElementById("c-return-toggle");
-const returnFields = document.getElementById("c-return-fields");
-const minStayField = document.getElementById("c-min-stay-field");
-returnToggle.onchange = ()=>{
-  returnFields.hidden = !returnToggle.checked;
-  minStayField.hidden = !returnToggle.checked;
-};
-
-getAllStations().then(list=>{
-  const dl = document.getElementById("stations-list");
-  dl.innerHTML = "";
-  list.forEach(s=>{
-    const opt = document.createElement("option");
-    opt.value = s;
-    dl.appendChild(opt);
-  });
-}).catch(e=>console.warn("Impossible de charger la liste des gares :", e));
-
-// ---- Feature 1: direct free trains from a departure town ----
-document.getElementById("d-search").onclick = async ()=>{
-  const originInput = document.getElementById("d-origin").value.trim();
-  const date = document.getElementById("d-date").value;
-  const depWindows = getWindows("d-dep-windows");
-  const arrWindows = getWindows("d-arr-windows");
-  const statusEl = document.getElementById("d-status");
-  const resultsEl = document.getElementById("d-results");
-  resultsEl.innerHTML = "";
-  if (!originInput || !date){ statusEl.innerHTML = '<span class="err">Merci de renseigner une ville de départ et une date.</span>'; return; }
-
-  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours…';
-  try{
-    const allStations = await getAllStations();
-    const originStations = resolveStations(originInput, allStations);
-    if (originStations.length === 0){
-      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(originInput)} ».</span>`;
-      return;
-    }
-    const originSet = new Set(originStations);
-    const trains = await getDayTrains(date);
-    const matches = trains
-      .filter(t => originSet.has(t.origine))
-      .filter(t => timeMatchesWindows(t.heure_depart, depWindows) && timeMatchesWindows(t.heure_arrivee, arrWindows))
-      .sort((a,b)=>a.departMin-b.departMin);
-
-    statusEl.textContent = `${matches.length} train(s) TGVmax libre(s) le ${date} depuis : ${originStations.join(", ")}.`;
-
-    if (matches.length === 0){
-      resultsEl.innerHTML = '<div class="empty">Aucun train avec place TGVmax libre trouvé pour ces critères. Essayez d’élargir la fenêtre horaire.</div>';
-      return;
-    }
-    let html = '<table><thead><tr><th>Départ</th><th>Arrivée</th><th>Destination</th><th>Durée</th><th>Train</th><th></th></tr></thead><tbody>';
-    for (const t of matches){
-      html += `<tr>
-        <td>${t.heure_depart}<br><span style="color:var(--muted);font-size:11.5px;">${t.origine}</span></td>
-        <td>${t.heure_arrivee}</td>
-        <td>${t.destination}</td>
-        <td>${durationLabel(t.arriveMin - t.departMin)}</td>
-        <td style="color:var(--muted);">n°${t.train_no}${t.axe ? " · "+t.axe : ""}</td>
-        <td><span class="pill">TGVmax libre</span></td>
-      </tr>`;
-    }
-    html += "</tbody></table>";
-    resultsEl.innerHTML = html;
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-};
-
-document.getElementById("d-alert-btn").onclick = async ()=>{
-  const originInput = document.getElementById("d-origin").value.trim();
-  const date = document.getElementById("d-date").value;
-  const depWindows = getWindows("d-dep-windows");
-  const arrWindows = getWindows("d-arr-windows");
-  const statusEl = document.getElementById("d-status");
-  if (!originInput || !date){
-    statusEl.innerHTML = '<span class="err">Merci de renseigner une ville de départ et une date avant de créer une alerte.</span>';
-    return;
-  }
-  const criteria = { type: "direct", origin: originInput, date, depWindows, arrWindows };
-  const label = `Départ ${originInput} — ${date}`;
-  statusEl.innerHTML = '<span class="spinner"></span>Création de l’alerte…';
-  try{
-    await createWatch(criteria, label);
-    statusEl.innerHTML = `<span class="pill">🔔 Alerte créée</span> — consultez l’onglet « Mes alertes ».`;
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-};
-
-// ---- Feature 2: connections search (max 3 legs), over a date range, optional return ----
-document.getElementById("c-search").onclick = async ()=>{
-  const originInput = document.getElementById("c-origin").value.trim();
-  const destInput = document.getElementById("c-dest").value.trim();
-  const dateMin = document.getElementById("c-date-min").value;
-  const dateMax = document.getElementById("c-date-max").value;
-  const returnEnabled = document.getElementById("c-return-toggle").checked;
-  const retDateMin = document.getElementById("c-ret-date-min").value;
-  const retDateMax = document.getElementById("c-ret-date-max").value;
-  const minSame = Number(document.getElementById("c-min-same").value)||0;
-  const minCity = Number(document.getElementById("c-min-city").value)||0;
-  const maxConn = Number(document.getElementById("c-max").value)||180;
-  const minStay = Number(document.getElementById("c-min-stay").value)||0;
-  const depWindows = getWindows("c-dep-windows");
-  const arrWindows = getWindows("c-arr-windows");
-  const statusEl = document.getElementById("c-status");
-  const resultsEl = document.getElementById("c-results");
-  resultsEl.innerHTML = "";
-
-  if (!originInput || !destInput || !dateMin || !dateMax){
-    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une plage de dates aller.</span>';
-    return;
-  }
-  if (dateMin > dateMax){
-    statusEl.innerHTML = '<span class="err">La date aller « du » doit être avant ou égale à la date « au ».</span>';
-    return;
-  }
-  if (returnEnabled){
-    if (!retDateMin || !retDateMax){
-      statusEl.innerHTML = '<span class="err">Merci de renseigner une plage de dates retour.</span>';
-      return;
-    }
-    if (retDateMin > retDateMax){
-      statusEl.innerHTML = '<span class="err">La date retour « du » doit être avant ou égale à la date « au ».</span>';
-      return;
-    }
-    if (retDateMax < dateMin){
-      statusEl.innerHTML = '<span class="err">La plage de dates retour doit se situer après le début de la plage aller.</span>';
-      return;
-    }
-  }
-
-  const outboundDates = dateRangeList(dateMin, dateMax);
-  const returnDates = returnEnabled ? dateRangeList(retDateMin, retDateMax) : [];
-  if (outboundDates.length > MAX_RANGE_DAYS){
-    statusEl.innerHTML = `<span class="err">Plage de dates aller trop large (${outboundDates.length} jours) — réduisez à ${MAX_RANGE_DAYS} jours maximum.</span>`;
-    return;
-  }
-  if (returnDates.length > MAX_RANGE_DAYS){
-    statusEl.innerHTML = `<span class="err">Plage de dates retour trop large (${returnDates.length} jours) — réduisez à ${MAX_RANGE_DAYS} jours maximum.</span>`;
-    return;
-  }
-
-  statusEl.innerHTML = '<span class="spinner"></span>Recherche en cours (jusqu’à 3 trains, plusieurs dates)…';
-  try{
-    const allStations = await getAllStations();
-    const originStations = resolveStations(originInput, allStations);
-    const destStations = resolveStations(destInput, allStations);
-    if (originStations.length === 0){
-      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(originInput)} ».</span>`; return;
-    }
-    if (destStations.length === 0){
-      statusEl.innerHTML = `<span class="err">Aucune gare ne correspond à « ${escapeHtml(destInput)} ».</span>`; return;
-    }
-    const originSet = new Set(originStations);
-    const destSet = new Set(destStations);
-    const connOpts = {minSame, minCity, maxConn};
-
-    const allDates = Array.from(new Set([...outboundDates, ...returnDates]));
-    await Promise.all(allDates.map(d => getDayTrains(d)));
-
-    const inTimeWindow = it => timeMatchesWindows(it.legs[0].heure_depart, depWindows)
-      && timeMatchesWindows(it.legs[it.legs.length-1].heure_arrivee, arrWindows);
-
-    let outboundItins = [];
-    for (const d of outboundDates){
-      outboundItins = outboundItins.concat(findItineraries(dayCache.get(d), originSet, destSet, connOpts));
-    }
-    outboundItins = outboundItins.filter(inTimeWindow);
-
-    let returnItins = [];
-    if (returnEnabled){
-      for (const d of returnDates){
-        returnItins = returnItins.concat(findItineraries(dayCache.get(d), destSet, originSet, connOpts));
-      }
-      returnItins = returnItins.filter(inTimeWindow);
-      returnItins.forEach(r => { r.absDepart = absoluteMinutes(r.legs[0].date, r.legs[0].departMin); });
-      returnItins.sort((a,b)=>a.absDepart-b.absDepart);
-      const returnDeparts = returnItins.map(r=>r.absDepart);
-
-      outboundItins.forEach(o => {
-        o.absArrive = absoluteMinutes(o.legs[o.legs.length-1].date, o.legs[o.legs.length-1].arriveMin);
-      });
-      outboundItins = outboundItins.filter(o => {
-        const idx = lowerBound(returnDeparts, o.absArrive + minStay);
-        const matches = returnItins.slice(idx);
-        o.compatibleReturnsTotal = matches.length;
-        o.compatibleReturns = matches.slice(0, 5);
-        return matches.length > 0;
-      });
-    }
-
-    // sort by absolute departure time across the (possibly multi-day) results
-    outboundItins.forEach(o => { o.absDepart = absoluteMinutes(o.legs[0].date, o.legs[0].departMin); });
-    outboundItins.sort((a,b)=> (a.legs.length-b.legs.length) || (a.absDepart-b.absDepart));
-
-    const rangeLabel = dateMin===dateMax ? `le ${dateMin}` : `entre le ${dateMin} et le ${dateMax}`;
-    const retRangeLabel = returnEnabled ? (retDateMin===retDateMax ? `le ${retDateMin}` : `entre le ${retDateMin} et le ${retDateMax}`) : "";
-    statusEl.textContent = returnEnabled
-      ? `${outboundItins.length} aller(s) 100% TGVmax avec un retour compatible trouvé(s) (aller ${rangeLabel}, retour ${retRangeLabel}) : ${originStations.join(", ")} → ${destStations.join(", ")}.`
-      : `${outboundItins.length} itinéraire(s) 100% TGVmax trouvé(s) ${rangeLabel} : ${originStations.join(", ")} → ${destStations.join(", ")}.`;
-
-    if (outboundItins.length === 0){
-      resultsEl.innerHTML = returnEnabled
-        ? '<div class="empty">Aucun aller avec un retour compatible trouvé pour ces critères. Essayez d’élargir les plages de dates, la fenêtre horaire, ou de réduire le temps mini sur place.</div>'
-        : '<div class="empty">Aucun itinéraire entièrement en places TGVmax libres trouvé (direct, 1 ou 2 correspondances) pour ces critères. Essayez d’élargir la plage de dates ou la fenêtre horaire.</div>';
-      return;
-    }
-
-    const byLegs = {1:[], 2:[], 3:[]};
-    outboundItins.forEach(it => byLegs[it.legs.length].push(it));
-
-    let html = "";
-    const titles = {1:"Trajets directs", 2:"1 correspondance", 3:"2 correspondances"};
-    for (const n of [1,2,3]){
-      const group = byLegs[n];
-      if (group.length === 0) continue;
-      html += `<div class="section-title">${titles[n]} (${group.length})</div>`;
-      group.slice(0,25).forEach(it => { html += renderItinerary(it, {showDate: outboundDates.length>1, returnBlock: returnEnabled}); });
-    }
-    resultsEl.innerHTML = html;
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-};
-
-document.getElementById("c-alert-btn").onclick = async ()=>{
-  const originInput = document.getElementById("c-origin").value.trim();
-  const destInput = document.getElementById("c-dest").value.trim();
-  const dateMin = document.getElementById("c-date-min").value;
-  const dateMax = document.getElementById("c-date-max").value;
-  const returnEnabled = document.getElementById("c-return-toggle").checked;
-  const retDateMin = document.getElementById("c-ret-date-min").value;
-  const retDateMax = document.getElementById("c-ret-date-max").value;
-  const minSame = Number(document.getElementById("c-min-same").value)||0;
-  const minCity = Number(document.getElementById("c-min-city").value)||0;
-  const maxConn = Number(document.getElementById("c-max").value)||180;
-  const minStay = Number(document.getElementById("c-min-stay").value)||0;
-  const depWindows = getWindows("c-dep-windows");
-  const arrWindows = getWindows("c-arr-windows");
-  const statusEl = document.getElementById("c-status");
-
-  if (!originInput || !destInput || !dateMin || !dateMax){
-    statusEl.innerHTML = '<span class="err">Merci de renseigner un départ, une arrivée et une plage de dates avant de créer une alerte.</span>';
-    return;
-  }
-  if (returnEnabled && (!retDateMin || !retDateMax)){
-    statusEl.innerHTML = '<span class="err">Merci de renseigner une plage de dates retour avant de créer une alerte.</span>';
-    return;
-  }
-
-  const criteria = {
-    type: "connections", origin: originInput, dest: destInput, dateMin, dateMax,
-    returnEnabled, retDateMin, retDateMax, minSame, minCity, maxConn, minStay,
-    depWindows, arrWindows,
-  };
-  let label = `${originInput} → ${destInput} (${dateMin}${dateMin!==dateMax?" au "+dateMax:""})`;
-  if (returnEnabled) label += ` + retour (${retDateMin}${retDateMin!==retDateMax?" au "+retDateMax:""})`;
-
-  statusEl.innerHTML = '<span class="spinner"></span>Création de l’alerte…';
-  try{
-    await createWatch(criteria, label);
-    statusEl.innerHTML = `<span class="pill">🔔 Alerte créée</span> — consultez l’onglet « Mes alertes ».`;
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-};
-
-function findItineraries(trains, originSet, destSet, opts){
-  const {minSame, minCity, maxConn} = opts;
-
-  const byOrigineIata = new Map();
-  const byOrigineName = new Map();
-  for (const t of trains){
-    if (!byOrigineIata.has(t.origine_iata)) byOrigineIata.set(t.origine_iata, []);
-    byOrigineIata.get(t.origine_iata).push(t);
-    if (!byOrigineName.has(t.origine)) byOrigineName.set(t.origine, []);
-    byOrigineName.get(t.origine).push(t);
-  }
-
-  function candidatesFrom(leg){
-    const out = [];
-    (byOrigineIata.get(leg.destination_iata)||[]).forEach(t2=>{
-      if (t2 === leg) return;
-      const gap = t2.departMin - leg.arriveMin;
-      if (gap >= minSame && gap <= maxConn) out.push(t2);
-    });
-    (byOrigineName.get(leg.destination)||[]).forEach(t2=>{
-      if (t2.origine_iata === leg.destination_iata) return; // already covered (same physical station)
-      const gap = t2.departMin - leg.arriveMin;
-      if (gap >= minCity && gap <= maxConn) out.push(t2);
-    });
-    return out;
-  }
-
-  const legsFromOrigin = trains.filter(t => originSet.has(t.origine));
-  const results = [];
-  const seen = new Set();
-
-  function tryAdd(legs){
-    const key = legs.map(t=>t.date+"#"+t.train_no+"#"+t.origine_iata+"#"+t.destination_iata).join(">");
-    if (seen.has(key)) return;
-    seen.add(key);
-    results.push({legs, depart:legs[0].departMin, arrive:legs[legs.length-1].arriveMin});
-  }
-
-  for (const leg1 of legsFromOrigin){
-    if (destSet.has(leg1.destination)){
-      tryAdd([leg1]);
-    }
-    const c1 = candidatesFrom(leg1);
-    for (const leg2 of c1){
-      if (leg2.origine_iata === leg1.origine_iata) continue;
-      if (destSet.has(leg2.destination)){
-        tryAdd([leg1, leg2]);
-        continue;
-      }
-      const c2 = candidatesFrom(leg2);
-      for (const leg3 of c2){
-        if (leg3.origine_iata === leg1.origine_iata || leg3.origine_iata === leg2.origine_iata) continue;
-        if (destSet.has(leg3.destination)){
-          tryAdd([leg1, leg2, leg3]);
-        }
-      }
-    }
-  }
-
-  results.sort((a,b)=> (a.legs.length - b.legs.length) || ((a.arrive-a.depart) - (b.arrive-b.depart)) || (a.depart-b.depart));
-  return results.slice(0, 300); // safety cap before grouping/rendering
-}
-
-function renderItinerary(it, opts){
-  opts = opts || {};
-  const total = it.arrive - it.depart;
-  const compactClass = opts.compact ? " compact" : "";
-  let html = `<div class="itin${compactClass}">`;
-  if (opts.showDate){
-    html += `<div class="date-badge">${formatDateLabel(it.legs[0].date)}</div>`;
-  }
-  html += `<div class="itin-head">
-    <div>${it.legs[0].heure_depart} → ${it.legs[it.legs.length-1].heure_arrivee} <span style="color:var(--muted);font-weight:400;">(${durationLabel(total)})</span></div>
-    <div class="legs-count">${it.legs.length===1?"Direct":it.legs.length-1+" correspondance"+(it.legs.length>2?"s":"")}</div>
-  </div>`;
-  it.legs.forEach((leg, i)=>{
-    if (i>0){
-      const prev = it.legs[i-1];
-      const gap = leg.departMin - prev.arriveMin;
-      const sameStation = leg.origine_iata === prev.destination_iata;
-      html += `<div class="connect">⏱ correspondance ${durationLabel(gap)}${sameStation ? "" : " · changement de gare à "+leg.origine}</div>`;
-    }
-    html += `<div class="leg">
-      <span class="time">${leg.heure_depart}</span>
-      <span>${leg.origine}</span>
-      <span class="arrow">→</span>
-      <span class="time">${leg.heure_arrivee}</span>
-      <span>${leg.destination}</span>
-      <span class="train">n°${leg.train_no}${leg.axe?" · "+leg.axe:""} <span class="pill">TGVmax</span></span>
-    </div>`;
-  });
-
-  if (opts.returnBlock && it.compatibleReturns){
-    html += `<div class="return-block"><div class="return-label">🔁 Retour${it.compatibleReturnsTotal>1?"s":""} compatible${it.compatibleReturnsTotal>1?"s":""} (${it.compatibleReturnsTotal})</div>`;
-    it.compatibleReturns.forEach(r => { html += renderItinerary(r, {showDate:true, compact:true}); });
-    if (it.compatibleReturnsTotal > it.compatibleReturns.length){
-      html += `<div class="more-note">+ ${it.compatibleReturnsTotal - it.compatibleReturns.length} autre(s) retour(s) possible(s)</div>`;
-    }
-    html += `</div>`;
-  }
-
-  html += "</div>";
-  return html;
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
-
-// ---- Alerts list (tab 3): fetch/render/delete watches saved on the Worker ----
-function formatWindowsSummary(windows){
-  if (!windows || windows.length===0) return "toute heure";
-  return windows.map(w => `${w.from||"00:00"}–${w.to||"24:00"}`).join(" ou ");
-}
-function formatCriteriaSummary(c){
-  if (c.type === "direct"){
-    return `Départ le ${c.date} · départ ${formatWindowsSummary(c.depWindows)} · arrivée ${formatWindowsSummary(c.arrWindows)}`;
-  }
-  let s = c.dateMin===c.dateMax ? `Aller le ${c.dateMin}` : `Aller entre le ${c.dateMin} et le ${c.dateMax}`;
-  if (c.returnEnabled) s += c.retDateMin===c.retDateMax ? ` · retour le ${c.retDateMin}` : ` · retour entre le ${c.retDateMin} et le ${c.retDateMax}`;
-  s += ` · départ ${formatWindowsSummary(c.depWindows)} · arrivée ${formatWindowsSummary(c.arrWindows)}`;
-  return s;
-}
-
-async function loadAlerts(){
-  const statusEl = document.getElementById("alerts-status");
-  const listEl = document.getElementById("alerts-list");
-  statusEl.innerHTML = '<span class="spinner"></span>Chargement…';
-  try{
-    const r = await fetch(`${WORKER_URL}/watches?deviceId=${encodeURIComponent(getDeviceId())}`);
-    if (!r.ok) throw new Error(`Erreur serveur (${r.status})`);
-    const { watches } = await r.json();
-    statusEl.textContent = `${watches.length} alerte(s) active(s) sur cet appareil.`;
-    if (watches.length === 0){
-      listEl.innerHTML = '<div class="empty">Aucune alerte pour l’instant. Créez-en une depuis les onglets de recherche.</div>';
-      return;
-    }
-    watches.sort((a,b)=> (b.createdAt||"").localeCompare(a.createdAt||""));
-    listEl.innerHTML = watches.map(w => `
-      <div class="watch-card">
-        <div class="watch-head">
-          <div>
-            <div class="watch-label">${escapeHtml(w.label || `${w.criteria.origin} → ${w.criteria.dest||""}`)}</div>
-            <div class="watch-meta">${escapeHtml(formatCriteriaSummary(w.criteria))}</div>
-            <div class="watch-meta">${w.lastCheckedAt ? "Dernière vérification : "+new Date(w.lastCheckedAt).toLocaleString("fr-FR") : "Pas encore vérifiée"}${w.lastError ? " · ⚠️ "+escapeHtml(w.lastError) : ""}</div>
-          </div>
-          <button class="btn-del" data-del="${w.id}">Supprimer</button>
-        </div>
-      </div>`).join("");
-    listEl.querySelectorAll("[data-del]").forEach(btn=>{
-      btn.onclick = ()=> deleteWatch(btn.dataset.del);
-    });
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-}
-
-async function deleteWatch(id){
-  const statusEl = document.getElementById("alerts-status");
-  try{
-    const r = await fetch(`${WORKER_URL}/watches/${encodeURIComponent(id)}?deviceId=${encodeURIComponent(getDeviceId())}`, { method: "DELETE" });
-    if (!r.ok) throw new Error(`Erreur serveur (${r.status})`);
-    await loadAlerts();
-  }catch(e){
-    console.error(e);
-    statusEl.innerHTML = `<span class="err">Erreur lors de la suppression : ${escapeHtml(e.message||String(e))}</span>`;
-  }
-}
-
-// ---- PWA: register service worker (app-shell offline cache; API calls always live) ----
-if ("serviceWorker" in navigator){
-  window.addEventListener("load", ()=>{
-    navigator.serviceWorker.register("sw.js").catch(e=>console.warn("SW registration failed:", e));
-  });
-}
-</script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

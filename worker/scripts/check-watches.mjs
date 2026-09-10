@@ -51,42 +51,6 @@ async function fetchJSON(url) {
   return r.json();
 }
 
-function normalize(s) {
-  return (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-}
-
-const PARIS_EXTRA_STATIONS = [
-  "AEROPORT ROISSY CDG 2 TGV",
-  "MARNE LA VALLEE CHESSY",
-  "MASSY PALAISEAU",
-  "MASSY TGV",
-];
-const PARIS_ALIASES = new Set([
-  "paris", "montparnasse", "austerlitz", "nord", "est", "bercy",
-  "cdg", "roissy", "massy", "marne la vallee", "disneyland", "disney",
-]);
-
-function resolveStations(query, allStations) {
-  const q = normalize(query);
-  if (q.length < 2) return [];
-  if (PARIS_ALIASES.has(q)) {
-    return allStations.filter(s => normalize(s).includes("paris") || PARIS_EXTRA_STATIONS.includes(s));
-  }
-  return allStations.filter(s => normalize(s).includes(q));
-}
-
-async function getAllStations() {
-  const set = new Set();
-  let offset = 0;
-  while (true) {
-    const data = await fetchJSON(buildUrl({ limit: PAGE_SIZE, offset, select: "origine", group_by: "origine" }));
-    data.results.forEach(r => set.add(r.origine));
-    if (data.results.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-  return Array.from(set).sort();
-}
-
 function hhmmToMin(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
   return h * 60 + m;
@@ -139,6 +103,29 @@ function timeMatchesWindows(hhmm, windows) {
   return windows.some(w => (!w.from || hhmm >= w.from) && (!w.to || hhmm <= w.to));
 }
 
+const JSDAY_TO_KEY = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+function weekdayKeyOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return JSDAY_TO_KEY[d.getDay()];
+}
+function matchesSchedule(dateStr, departHHMM, arriveHHMM, schedule) {
+  if (!schedule) return true;
+  const day = schedule[weekdayKeyOf(dateStr)];
+  if (!day) return true;
+  const depOk = timeMatchesWindows(departHHMM, day.dep);
+  const arrOk = timeMatchesWindows(arriveHHMM, day.arr);
+  return schedule.combine === "AND" ? (depOk && arrOk) : (depOk || arrOk);
+}
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+function nowHHMM() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+function notYetDeparted(dateStr, departHHMM) {
+  if (dateStr !== todayStr()) return true;
+  return departHHMM > nowHHMM();
+}
+
 // Exact port of the client's connection-finding algorithm (index.html) — keep in sync.
 function findItineraries(trains, originSet, destSet, opts) {
   const { minSame, minCity, maxConn } = opts;
@@ -164,7 +151,7 @@ function findItineraries(trains, originSet, destSet, opts) {
     });
     return out;
   }
-  const legsFromOrigin = trains.filter(t => originSet.has(t.origine));
+  const legsFromOrigin = trains.filter(t => originSet.has(t.origine_iata));
   const results = [];
   const seen = new Set();
   function tryAdd(legs) {
@@ -174,15 +161,15 @@ function findItineraries(trains, originSet, destSet, opts) {
     results.push({ legs, depart: legs[0].departMin, arrive: legs[legs.length - 1].arriveMin, key });
   }
   for (const leg1 of legsFromOrigin) {
-    if (destSet.has(leg1.destination)) tryAdd([leg1]);
+    if (destSet.has(leg1.destination_iata)) tryAdd([leg1]);
     const c1 = candidatesFrom(leg1);
     for (const leg2 of c1) {
       if (leg2.origine_iata === leg1.origine_iata) continue;
-      if (destSet.has(leg2.destination)) { tryAdd([leg1, leg2]); continue; }
+      if (destSet.has(leg2.destination_iata)) { tryAdd([leg1, leg2]); continue; }
       const c2 = candidatesFrom(leg2);
       for (const leg3 of c2) {
         if (leg3.origine_iata === leg1.origine_iata || leg3.origine_iata === leg2.origine_iata) continue;
-        if (destSet.has(leg3.destination)) tryAdd([leg1, leg2, leg3]);
+        if (destSet.has(leg3.destination_iata)) tryAdd([leg1, leg2, leg3]);
       }
     }
   }
@@ -199,15 +186,16 @@ function describeItinerary(it) {
   return `${first.date} ${first.heure_depart} ${first.origine} → ${last.heure_arrivee} ${last.destination} (${kind})`;
 }
 
-async function checkDirectWatch(watch, allStations) {
+async function checkDirectWatch(watch) {
   const c = watch.criteria;
-  const originStations = resolveStations(c.origin, allStations);
-  if (originStations.length === 0) return { entries: [] };
-  const originSet = new Set(originStations);
+  const originIatas = c.originIatas || [];
+  if (originIatas.length === 0) return { entries: [] };
+  const originSet = new Set(originIatas);
   const trains = await getDayTrains(c.date);
   const matches = trains
-    .filter(t => originSet.has(t.origine))
-    .filter(t => timeMatchesWindows(t.heure_depart, c.depWindows) && timeMatchesWindows(t.heure_arrivee, c.arrWindows));
+    .filter(t => originSet.has(t.origine_iata))
+    .filter(t => timeMatchesWindows(t.heure_depart, c.depWindows) && timeMatchesWindows(t.heure_arrivee, c.arrWindows))
+    .filter(t => notYetDeparted(t.date, t.heure_depart));
   const entries = matches.map(t => ({
     key: `${t.date}#${t.train_no}#${t.origine_iata}#${t.destination_iata}`,
     describe: describeDirect(t),
@@ -215,33 +203,36 @@ async function checkDirectWatch(watch, allStations) {
   return { entries };
 }
 
-async function checkConnectionsWatch(watch, allStations) {
+async function checkConnectionsWatch(watch) {
   const c = watch.criteria;
-  const originStations = resolveStations(c.origin, allStations);
-  const destStations = resolveStations(c.dest, allStations);
-  if (originStations.length === 0 || destStations.length === 0) return { entries: [] };
-  const originSet = new Set(originStations);
-  const destSet = new Set(destStations);
+  const originIatas = c.originIatas || [];
+  const destIatas = c.destIatas || [];
+  if (originIatas.length === 0 || destIatas.length === 0) return { entries: [] };
+  const originSet = new Set(originIatas);
+  const destSet = new Set(destIatas);
   const connOpts = { minSame: c.minSame || 0, minCity: c.minCity || 0, maxConn: c.maxConn || 180 };
 
   const outboundDates = dateRangeList(c.dateMin, c.dateMax).slice(0, MAX_RANGE_DAYS);
   const returnDates = c.returnEnabled ? dateRangeList(c.retDateMin, c.retDateMax).slice(0, MAX_RANGE_DAYS) : [];
 
-  const inTimeWindow = it => timeMatchesWindows(it.legs[0].heure_depart, c.depWindows)
-    && timeMatchesWindows(it.legs[it.legs.length - 1].heure_arrivee, c.arrWindows);
+  const inSchedule = it => matchesSchedule(it.legs[0].date, it.legs[0].heure_depart, it.legs[it.legs.length - 1].heure_arrivee, c.schedule);
 
   let outboundItins = [];
   for (const d of outboundDates) {
     outboundItins = outboundItins.concat(findItineraries(await getDayTrains(d), originSet, destSet, connOpts));
   }
-  outboundItins = outboundItins.filter(inTimeWindow);
+  outboundItins = outboundItins
+    .filter(inSchedule)
+    .filter(it => notYetDeparted(it.legs[0].date, it.legs[0].heure_depart));
 
   if (c.returnEnabled) {
     let returnItins = [];
     for (const d of returnDates) {
       returnItins = returnItins.concat(findItineraries(await getDayTrains(d), destSet, originSet, connOpts));
     }
-    returnItins = returnItins.filter(inTimeWindow);
+    returnItins = returnItins
+      .filter(inSchedule)
+      .filter(it => notYetDeparted(it.legs[0].date, it.legs[0].heure_depart));
     returnItins.forEach(r => { r.absDepart = absoluteMinutes(r.legs[0].date, r.legs[0].departMin); });
     returnItins.sort((a, b) => a.absDepart - b.absDepart);
     const returnDeparts = returnItins.map(r => r.absDepart);
@@ -278,14 +269,12 @@ async function main() {
   console.log(`${watches.length} alerte(s) à vérifier.`);
   if (watches.length === 0) return;
 
-  const allStations = await getAllStations();
-
   for (const watch of watches) {
     const nowIso = new Date().toISOString();
     try {
       const { entries } = watch.criteria.type === "direct"
-        ? await checkDirectWatch(watch, allStations)
-        : await checkConnectionsWatch(watch, allStations);
+        ? await checkDirectWatch(watch)
+        : await checkConnectionsWatch(watch);
 
       const notifiedSet = new Set(watch.notifiedKeys || []);
       const newEntries = entries.filter(e => !notifiedSet.has(e.key));
