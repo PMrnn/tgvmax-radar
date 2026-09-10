@@ -123,11 +123,20 @@ function formatDateLabel(dateStr){
   const d = new Date(dateStr+"T00:00:00");
   return dateLabelFmt.format(d).replace(".", "");
 }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
-function nowHHMM(){
-  const d = new Date();
-  return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+// SNCF's `date`/`heure_depart` fields are always French local time, regardless of the
+// viewer's own timezone/DST — so "now" must be computed in Europe/Paris explicitly rather
+// than via toISOString() (UTC) or getHours()/getDate() (viewer's local time), either of
+// which can be off by a day or a few hours for a visitor outside France.
+function nowInParis(){
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris", year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", hour12:false,
+  }).formatToParts(new Date());
+  const get = type => parts.find(p=>p.type===type).value;
+  return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
 }
+function todayStr(){ return nowInParis().date; }
+function nowHHMM(){ return nowInParis().time; }
 // Only relevant for a same-day search: hide trains whose departure has already passed.
 function notYetDeparted(dateStr, departHHMM){
   if (dateStr !== todayStr()) return true;
@@ -366,31 +375,43 @@ returnToggle.onchange = ()=>{
   minStayField.hidden = !returnToggle.checked;
 };
 
-// Keeps the retour dates from ever being scheduled before the aller: whenever either
-// aller date changes, the retour "du" (and, transitively, "au") snap forward to the
-// latest possible aller day (dateMax) if they'd otherwise precede it.
-function bumpReturnDates(){
+// Date logic for the two "du/au" pairs (aller, retour):
+//  1. Picking a pair's "du" snaps that same pair's "au" to match it (single-day default).
+//  2. The retour pair is never allowed to start before the aller's "au".
+function reconcileDates(changedId){
+  const dateMinEl = document.getElementById("c-date-min");
   const dateMaxEl = document.getElementById("c-date-max");
   const retMinEl = document.getElementById("c-ret-date-min");
   const retMaxEl = document.getElementById("c-ret-date-max");
-  if (!dateMaxEl.value) return;
-  retMinEl.min = dateMaxEl.value;
-  if (!retMinEl.value || retMinEl.value < dateMaxEl.value) retMinEl.value = dateMaxEl.value;
-  retMaxEl.min = retMinEl.value;
-  if (!retMaxEl.value || retMaxEl.value < retMinEl.value) retMaxEl.value = retMinEl.value;
+
+  if (changedId === "c-date-min" && dateMinEl.value){
+    dateMaxEl.min = dateMinEl.value;
+    dateMaxEl.value = dateMinEl.value;
+  }
+  if (changedId === "c-ret-date-min" && retMinEl.value){
+    retMaxEl.value = retMinEl.value;
+  }
+  if (dateMaxEl.value){
+    retMinEl.min = dateMaxEl.value;
+    if (!retMinEl.value || retMinEl.value < dateMaxEl.value){
+      retMinEl.value = dateMaxEl.value;
+      retMaxEl.value = retMinEl.value;
+    }
+    retMaxEl.min = retMinEl.value;
+  }
 }
-["c-date-min","c-date-max"].forEach(id=>{
+["c-date-min","c-date-max","c-ret-date-min"].forEach(id=>{
   const el = document.getElementById(id);
-  el.addEventListener("change", bumpReturnDates);
-  el.addEventListener("input", bumpReturnDates);
+  el.addEventListener("change", ()=>reconcileDates(id));
+  el.addEventListener("input", ()=>reconcileDates(id));
 });
-document.getElementById("c-ret-date-min").addEventListener("change", ()=>{
+document.getElementById("c-ret-date-max").addEventListener("change", ()=>{
   const retMinEl = document.getElementById("c-ret-date-min");
   const retMaxEl = document.getElementById("c-ret-date-max");
   retMaxEl.min = retMinEl.value;
   if (retMaxEl.value < retMinEl.value) retMaxEl.value = retMinEl.value;
 });
-bumpReturnDates();
+reconcileDates(null);
 
 function summarizeSchedule(schedule){
   const weekdays = WEEKDAY_ORDER.filter(d=>!WEEKEND_KEYS.has(d));
